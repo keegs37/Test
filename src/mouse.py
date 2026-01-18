@@ -1,5 +1,13 @@
 import threading
 import time
+import importlib
+import inspect
+
+try:
+    from makcu import create_controller, MouseButton
+except Exception:  # makcu must be installed for mouse support
+    create_controller = None
+    MouseButton = None
 
 from config import config
 
@@ -72,6 +80,8 @@ def listen_makcu():
         for i in range(5):
             button_states[i] = False
 
+    callback_enabled = _setup_button_monitoring()
+
     while is_connected:
         try:
             _set_button_state(0, _read_button("isdown_left"))
@@ -131,6 +141,7 @@ _mask_applied_idx = None
 def mask_manager_tick(selected_idx: int, aimbot_running: bool):
     # kmNet does not expose button lock management; keep interface for callers.
     return
+
 
 
 class Mouse:
