@@ -264,8 +264,60 @@ class EventuriGUI(ctk.CTk, GUISections, GUICallbacks):
         text_color="#fff"
     )
         self.button_mask_switch.grid(row=1, column=3, padx=15, pady=(0, 15), sticky="w")
-        
-        
+        # --- kmNet connection settings ---
+        kmnet_frame = ctk.CTkFrame(frame, fg_color="transparent")
+        kmnet_frame.grid(row=2, column=0, columnspan=4, sticky="ew", padx=15, pady=(0, 10))
+        kmnet_frame.grid_columnconfigure(1, weight=1)
+        kmnet_frame.grid_columnconfigure(3, weight=1)
+
+        ctk.CTkLabel(kmnet_frame, text="kmNet IP:", font=("Segoe UI", 12), text_color="#ffffff")\
+            .grid(row=0, column=0, sticky="w", padx=(0, 8), pady=(0, 6))
+        self.kmnet_ip_entry = ctk.CTkEntry(kmnet_frame, width=140)
+        self.kmnet_ip_entry.grid(row=0, column=1, sticky="w", padx=(0, 15), pady=(0, 6))
+        self.kmnet_ip_entry.insert(0, str(getattr(config, "kmnet_ip", "")))
+
+        ctk.CTkLabel(kmnet_frame, text="kmNet Port:", font=("Segoe UI", 12), text_color="#ffffff")\
+            .grid(row=0, column=2, sticky="w", padx=(0, 8), pady=(0, 6))
+        self.kmnet_port_entry = ctk.CTkEntry(kmnet_frame, width=90, justify="center")
+        self.kmnet_port_entry.grid(row=0, column=3, sticky="w", padx=(0, 15), pady=(0, 6))
+        self.kmnet_port_entry.insert(0, str(getattr(config, "kmnet_port", "")))
+
+        ctk.CTkLabel(kmnet_frame, text="kmNet MAC:", font=("Segoe UI", 12), text_color="#ffffff")\
+            .grid(row=1, column=0, sticky="w", padx=(0, 8), pady=(0, 6))
+        self.kmnet_mac_entry = ctk.CTkEntry(kmnet_frame, width=140)
+        self.kmnet_mac_entry.grid(row=1, column=1, sticky="w", padx=(0, 15), pady=(0, 6))
+        self.kmnet_mac_entry.insert(0, str(getattr(config, "kmnet_mac", "")))
+
+        ctk.CTkLabel(kmnet_frame, text="Monitor Port:", font=("Segoe UI", 12), text_color="#ffffff")\
+            .grid(row=1, column=2, sticky="w", padx=(0, 8), pady=(0, 6))
+        self.kmnet_monitor_entry = ctk.CTkEntry(kmnet_frame, width=90, justify="center")
+        self.kmnet_monitor_entry.grid(row=1, column=3, sticky="w", padx=(0, 15), pady=(0, 6))
+        self.kmnet_monitor_entry.insert(0, str(getattr(config, "kmnet_monitor_port", 8888)))
+
+        def _commit_kmnet(event=None):
+            ip = self.kmnet_ip_entry.get().strip()
+            port = self.kmnet_port_entry.get().strip()
+            mac = self.kmnet_mac_entry.get().strip()
+            try:
+                monitor_port = int(self.kmnet_monitor_entry.get().strip())
+            except Exception:
+                monitor_port = getattr(config, "kmnet_monitor_port", 8888)
+
+            config.kmnet_ip = ip
+            config.kmnet_port = port
+            config.kmnet_mac = mac
+            config.kmnet_monitor_port = monitor_port
+            if hasattr(config, "save") and callable(config.save):
+                config.save()
+
+        for entry in (
+            self.kmnet_ip_entry,
+            self.kmnet_port_entry,
+            self.kmnet_mac_entry,
+            self.kmnet_monitor_entry,
+        ):
+            entry.bind("<Return>", _commit_kmnet)
+            entry.bind("<FocusOut>", _commit_kmnet)
 
 
     def build_capture_controls(self, parent, row):
@@ -1110,6 +1162,15 @@ class EventuriGUI(ctk.CTk, GUISections, GUICallbacks):
         try:
             self.main_res_w_entry.delete(0, "end"); self.main_res_w_entry.insert(0, str(config.main_pc_width))
             self.main_res_h_entry.delete(0, "end"); self.main_res_h_entry.insert(0, str(config.main_pc_height))
+        except Exception:
+            pass
+
+        # kmNet entries
+        try:
+            self.kmnet_ip_entry.delete(0, "end"); self.kmnet_ip_entry.insert(0, str(getattr(config, "kmnet_ip", "")))
+            self.kmnet_port_entry.delete(0, "end"); self.kmnet_port_entry.insert(0, str(getattr(config, "kmnet_port", "")))
+            self.kmnet_mac_entry.delete(0, "end"); self.kmnet_mac_entry.insert(0, str(getattr(config, "kmnet_mac", "")))
+            self.kmnet_monitor_entry.delete(0, "end"); self.kmnet_monitor_entry.insert(0, str(getattr(config, "kmnet_monitor_port", 8888)))
         except Exception:
             pass
 

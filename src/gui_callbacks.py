@@ -44,6 +44,13 @@ class GUICallbacks:
         self.debug_checkbox_var.set(config.show_debug_window)
         self.input_check_var.set(False)
         self.error_text.set("")
+        try:
+            self.kmnet_ip_entry.delete(0, "end"); self.kmnet_ip_entry.insert(0, str(getattr(config, "kmnet_ip", "")))
+            self.kmnet_port_entry.delete(0, "end"); self.kmnet_port_entry.insert(0, str(getattr(config, "kmnet_port", "")))
+            self.kmnet_mac_entry.delete(0, "end"); self.kmnet_mac_entry.insert(0, str(getattr(config, "kmnet_mac", "")))
+            self.kmnet_monitor_entry.delete(0, "end"); self.kmnet_monitor_entry.insert(0, str(getattr(config, "kmnet_monitor_port", 8888)))
+        except Exception:
+            pass
 
     def on_connect(self):
         if connect_to_makcu():

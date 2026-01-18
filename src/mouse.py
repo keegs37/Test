@@ -16,6 +16,13 @@ try:
 except Exception:
     kmNet = None
 
+from config import config
+
+try:
+    import kmNet
+except Exception:
+    kmNet = None
+
 button_states = {i: False for i in range(5)}
 button_states_lock = threading.Lock()
 is_connected = False
@@ -141,7 +148,6 @@ _mask_applied_idx = None
 def mask_manager_tick(selected_idx: int, aimbot_running: bool):
     # kmNet does not expose button lock management; keep interface for callers.
     return
-
 
 
 class Mouse:
