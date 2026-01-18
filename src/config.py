@@ -57,6 +57,23 @@ class Config:
         self.always_on_aim = False
         self.main_pc_width = 1920  # Default width for main PC
         self.main_pc_height = 1080  # Default height for main PC
+        self.capture_card_index = 0
+        self.capture_card_width = 0
+        self.capture_card_height = 0
+        self.capture_card_device_name = ""
+        self.capture_width = 1920
+        self.capture_height = 1080
+        self.capture_fps = 240
+        self.capture_device_index = 0
+        self.capture_fourcc_preference = ["NV12", "YUY2", "MJPG"]
+        self.capture_range_x = 0
+        self.capture_range_y = 0
+        self.capture_offset_x = 0
+        self.capture_offset_y = 0
+        self.kmnet_ip = "192.168.2.188"
+        self.kmnet_port = "12545"
+        self.kmnet_mac = "F101383B"
+        self.kmnet_monitor_port = 8888
 
         # --- Model and Detection ---
         self.models_dir = "models"
