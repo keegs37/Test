@@ -70,6 +70,10 @@ class Config:
         self.capture_range_y = 0
         self.capture_offset_x = 0
         self.capture_offset_y = 0
+        self.kmnet_ip = ""
+        self.kmnet_port = ""
+        self.kmnet_mac = ""
+        self.kmnet_monitor_port = 8888
 
         # --- Model and Detection ---
         self.models_dir = "models"

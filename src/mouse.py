@@ -9,7 +9,13 @@ except Exception:  # makcu must be installed for mouse support
     create_controller = None
     MouseButton = None
 
-makcu = None
+from config import config
+
+try:
+    import kmNet
+except Exception:
+    kmNet = None
+
 button_states = {i: False for i in range(5)}
 button_states_lock = threading.Lock()
 is_connected = False
@@ -21,108 +27,53 @@ def _set_button_state(idx: int, pressed: bool):
         button_states[idx] = bool(pressed)
 
 
-def _setup_button_monitoring():
-    if makcu is None or MouseButton is None:
+def _read_button(fn_name: str):
+    if kmNet is None:
         return False
-
-    mapping = {
-        MouseButton.LEFT: 0,
-        MouseButton.RIGHT: 1,
-        MouseButton.MIDDLE: 2,
-        MouseButton.MOUSE4: 3,
-        MouseButton.MOUSE5: 4,
-    }
-
-    def _on_button_event(button, pressed):
-        idx = mapping.get(button)
-        if idx is None and hasattr(button, "name"):
-            name = str(button.name).upper()
-            name_map = {"LEFT": 0, "RIGHT": 1, "MIDDLE": 2, "MOUSE4": 3, "MOUSE5": 4}
-            idx = name_map.get(name)
-        if idx is not None:
-            _set_button_state(idx, pressed)
-
-    set_callback = getattr(makcu, "set_button_callback", None)
-    enable_monitoring = getattr(makcu, "enable_button_monitoring", None)
-    if callable(set_callback) and callable(enable_monitoring):
+    fn = getattr(kmNet, fn_name, None)
+    if callable(fn):
         try:
-            set_callback(_on_button_event)
-            enable_monitoring(True)
-            return True
+            return bool(fn())
         except Exception:
             return False
     return False
 
 
-def _poll_button_states():
-    if makcu is None:
-        return
-    get_states = getattr(makcu, "get_button_states", None)
-    is_pressed = getattr(makcu, "is_pressed", None)
-    if callable(get_states):
-        try:
-            states = get_states()
-        except Exception:
-            return
-        if isinstance(states, dict):
-            for key, idx in (("LEFT", 0), ("RIGHT", 1), ("MIDDLE", 2), ("MOUSE4", 3), ("MOUSE5", 4)):
-                if key in states:
-                    _set_button_state(idx, states[key])
-        elif isinstance(states, (list, tuple)):
-            for i, value in enumerate(states[:5]):
-                _set_button_state(i, value)
-        return
-    if callable(is_pressed) and MouseButton is not None:
-        try:
-            _set_button_state(0, is_pressed(MouseButton.LEFT))
-            _set_button_state(1, is_pressed(MouseButton.RIGHT))
-            _set_button_state(2, is_pressed(MouseButton.MIDDLE))
-            _set_button_state(3, is_pressed(MouseButton.MOUSE4))
-            _set_button_state(4, is_pressed(MouseButton.MOUSE5))
-        except Exception:
-            return
-
-
 def connect_to_makcu():
-    global makcu, is_connected
-    if create_controller is None:
-        print("[ERROR] makcu library not installed. Please install 'makcu'.")
+    global is_connected
+    if kmNet is None:
+        print("[ERROR] kmNet module not available. Ensure kmNet.pyd is installed in your Python env.")
         return False
+
+    ip = str(getattr(config, "kmnet_ip", "")).strip()
+    port = str(getattr(config, "kmnet_port", "")).strip()
+    mac = str(getattr(config, "kmnet_mac", "")).strip()
+    monitor_port = int(getattr(config, "kmnet_monitor_port", 0))
+
+    if not ip or not port or not mac:
+        print("[ERROR] kmNet config missing. Set kmnet_ip, kmnet_port, and kmnet_mac in config.")
+        return False
+
     try:
-        makcu = create_controller(debug=False, auto_reconnect=True)
-    except TypeError:
-        makcu = create_controller()
+        result = kmNet.init(ip, port, mac)
     except Exception as e:
-        print(f"[ERROR] makcu create_controller failed: {e}")
+        print(f"[ERROR] kmNet init failed: {e}")
         return False
+
+    if result != 0:
+        print(f"[ERROR] kmNet init failed with code {result}")
+        return False
+
+    if monitor_port:
+        try:
+            kmNet.monitor(monitor_port)
+        except Exception as e:
+            print(f"[WARN] kmNet monitor failed: {e}")
 
     is_connected = True
     start_listener()
     return True
 
-
-def _apply_button_mask(v: int):
-    global last_value
-    if not isinstance(v, int) or v < 0 or v > 31:
-        return
-    changed = last_value ^ v
-    if changed:
-        with button_states_lock:
-            for i in range(5):
-                m = 1 << i
-                if changed & m:
-                    button_states[i] = bool(v & m)
-        last_value = v
-
-def _extract_mask_from_line(line: str):
-    matches = re.findall(r"\d+", line)
-    if not matches:
-        return None
-    try:
-        value = int(matches[-1])
-    except ValueError:
-        return None
-    return value if 0 <= value <= 31 else None
 
 def listen_makcu():
     with button_states_lock:
@@ -133,8 +84,11 @@ def listen_makcu():
 
     while is_connected:
         try:
-            if not callback_enabled:
-                _poll_button_states()
+            _set_button_state(0, _read_button("isdown_left"))
+            _set_button_state(1, _read_button("isdown_right"))
+            _set_button_state(2, _read_button("isdown_middle"))
+            _set_button_state(3, _read_button("isdown_x1") or _read_button("isdown_side4"))
+            _set_button_state(4, _read_button("isdown_x2") or _read_button("isdown_side5"))
             time.sleep(0.01)
         except Exception:
             time.sleep(0.01)
@@ -154,90 +108,40 @@ def start_listener():
     _listener_thread.start()
 
 
-def start_listener():
-    global listener_thread
-    if not is_connected:
-        return
-    if listener_thread and listener_thread.is_alive():
-        return
-    listener_thread = threading.Thread(target=listen_makcu, daemon=True)
-    listener_thread.start()
-
 def is_button_pressed(idx: int) -> bool:
     with button_states_lock:
         return button_states.get(idx, False)
 
 
 def test_move():
-    if is_connected and makcu is not None:
+    if is_connected and kmNet is not None:
         try:
-            makcu.move(100, 100)
+            kmNet.move(100, 100)
         except Exception:
             pass
 
 
 def lock_button_idx(idx: int):
-    if not is_connected or makcu is None or MouseButton is None:
-        return
-    lock_fn = getattr(makcu, "lock", None)
-    if not callable(lock_fn):
-        return
-    mapping = [MouseButton.LEFT, MouseButton.RIGHT, MouseButton.MIDDLE, MouseButton.MOUSE4, MouseButton.MOUSE5]
-    if 0 <= idx < len(mapping):
-        try:
-            lock_fn(mapping[idx])
-        except Exception:
-            pass
+    # kmNet does not expose button locks; no-op for compatibility.
+    return
 
 
 def unlock_button_idx(idx: int):
-    if not is_connected or makcu is None or MouseButton is None:
-        return
-    unlock_fn = getattr(makcu, "unlock", None)
-    if not callable(unlock_fn):
-        return
-    mapping = [MouseButton.LEFT, MouseButton.RIGHT, MouseButton.MIDDLE, MouseButton.MOUSE4, MouseButton.MOUSE5]
-    if 0 <= idx < len(mapping):
-        try:
-            unlock_fn(mapping[idx])
-        except Exception:
-            pass
+    # kmNet does not expose button locks; no-op for compatibility.
+    return
 
 
 def unlock_all_locks():
-    for i in range(5):
-        unlock_button_idx(i)
+    return
 
 
 _mask_applied_idx = None
 
 
 def mask_manager_tick(selected_idx: int, aimbot_running: bool):
-    global _mask_applied_idx
-    if not is_connected:
-        _mask_applied_idx = None
-        return
+    # kmNet does not expose button lock management; keep interface for callers.
+    return
 
-    if not isinstance(selected_idx, int) or not (0 <= selected_idx <= 4):
-        selected_idx = None
-
-    if not aimbot_running:
-        if _mask_applied_idx is not None:
-            unlock_button_idx(_mask_applied_idx)
-            _mask_applied_idx = None
-        return
-
-    if selected_idx is None:
-        if _mask_applied_idx is not None:
-            unlock_button_idx(_mask_applied_idx)
-            _mask_applied_idx = None
-        return
-
-    if _mask_applied_idx != selected_idx:
-        if _mask_applied_idx is not None:
-            unlock_button_idx(_mask_applied_idx)
-        lock_button_idx(selected_idx)
-        _mask_applied_idx = selected_idx
 
 
 class Mouse:
@@ -258,61 +162,56 @@ class Mouse:
             self._inited = True
 
     def move(self, x: float, y: float):
-        if not is_connected or makcu is None:
+        if not is_connected or kmNet is None:
             return
         try:
-            makcu.move(int(x), int(y))
+            kmNet.move(int(x), int(y))
         except Exception:
             pass
 
     def move_bezier(self, x: float, y: float, segments: int, ctrl_x: float, ctrl_y: float):
-        if not is_connected or makcu is None:
+        if not is_connected or kmNet is None:
             return
-        move_bezier = getattr(makcu, "move_bezier", None)
+        move_bezier = getattr(kmNet, "move_beizer", None)
         if callable(move_bezier):
+            ms = max(1, int(segments) * 10)
             try:
-                move_bezier(int(x), int(y), int(segments), int(ctrl_x), int(ctrl_y))
+                move_bezier(int(x), int(y), ms, int(ctrl_x), int(ctrl_y), int(ctrl_x), int(ctrl_y))
                 return
             except Exception:
                 pass
-        move_smooth = getattr(makcu, "move_smooth", None)
-        if callable(move_smooth):
+        move_auto = getattr(kmNet, "move_auto", None)
+        if callable(move_auto):
+            ms = max(1, int(segments) * 10)
             try:
-                move_smooth(int(x), int(y), int(segments))
-                return
+                move_auto(int(x), int(y), ms)
             except Exception:
                 pass
 
     def click(self):
-        if not is_connected or makcu is None:
+        if not is_connected or kmNet is None:
             return
         try:
-            makcu.click(MouseButton.LEFT if MouseButton else None)
+            kmNet.left(1)
+            kmNet.left(0)
         except Exception:
-            try:
-                makcu.click()
-            except Exception:
-                pass
+            pass
 
     def press(self):
-        if not is_connected or makcu is None or MouseButton is None:
+        if not is_connected or kmNet is None:
             return
-        press_fn = getattr(makcu, "press", None)
-        if callable(press_fn):
-            try:
-                press_fn(MouseButton.LEFT)
-            except Exception:
-                pass
+        try:
+            kmNet.left(1)
+        except Exception:
+            pass
 
     def release(self):
-        if not is_connected or makcu is None or MouseButton is None:
+        if not is_connected or kmNet is None:
             return
-        release_fn = getattr(makcu, "release", None)
-        if callable(release_fn):
-            try:
-                release_fn(MouseButton.LEFT)
-            except Exception:
-                pass
+        try:
+            kmNet.left(0)
+        except Exception:
+            pass
 
     @staticmethod
     def mask_manager_tick(selected_idx: int, aimbot_running: bool):
@@ -320,24 +219,17 @@ class Mouse:
 
     @staticmethod
     def cleanup():
-        global is_connected, makcu, _mask_applied_idx, _listener_thread
-        try:
-            unlock_all_locks()
-        except Exception:
-            pass
+        global is_connected, _mask_applied_idx, _listener_thread
         _mask_applied_idx = None
-        listener_thread = None
-
         is_connected = False
-        if makcu is not None:
-            disconnect_fn = getattr(makcu, "disconnect", None)
-            if callable(disconnect_fn):
+        if kmNet is not None:
+            monitor_port = int(getattr(config, "kmnet_monitor_port", 0))
+            if monitor_port:
                 try:
-                    disconnect_fn()
+                    kmNet.monitor(0)
                 except Exception:
                     pass
-        makcu = None
         Mouse._instance = None
         Mouse._listener = None
         _listener_thread = None
-        print("[INFO] Mouse serial cleaned up.")
+        print("[INFO] Mouse kmNet cleaned up.")
