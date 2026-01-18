@@ -93,6 +93,8 @@ Configure detection/aim settings, select your classes/game targets.
 
 Press START AIMBOT, change sensitivity to your in-game sens, hold your activation key, and you’re set.
 
+For capture cards, select **CAPTURE** in the Capture Method menu and set the card index/resolution in the Capture Controls section (use index 0 for the first card).
+
 ---
 
 ## Supported Devices

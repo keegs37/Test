@@ -170,6 +170,19 @@ def connect_to_makcu():
 def count_bits(n: int) -> int:
     return bin(n).count("1")
 
+def _apply_button_mask(v: int):
+    global last_value
+    if not isinstance(v, int) or v < 0 or v > 31:
+        return
+    changed = last_value ^ v
+    if changed:
+        with button_states_lock:
+            for i in range(5):
+                m = 1 << i
+                if changed & m:
+                    button_states[i] = bool(v & m)
+        last_value = v
+
 def listen_makcu():
     global last_value
     # start from a clean state
@@ -178,27 +191,43 @@ def listen_makcu():
         for i in range(5):
             button_states[i] = False
 
+    ascii_buffer = bytearray()
+
     while is_connected:
         try:
-            b = makcu.read(1)  # blocking read (uses port timeout)
-            if not b:
+            chunk = makcu.read(makcu.in_waiting or 1)  # blocking read (uses port timeout)
+            if not chunk:
                 continue
 
-            v = b[0]
+            for byte in chunk:
+                # direct bitmask (0..31)
+                if byte <= 31:
+                    if ascii_buffer:
+                        ascii_buffer.clear()
+                    _apply_button_mask(byte)
+                    continue
 
-            # Ignore echoed ASCII (including CR/LF). Only 0..31 are valid masks.
-            if v in (0x0A, 0x0D) or v > 31:
-                continue
+                # handle ASCII-encoded mask lines like "31\r\n"
+                if byte in (0x0A, 0x0D):
+                    if ascii_buffer:
+                        try:
+                            _apply_button_mask(int(ascii_buffer.decode("ascii", "ignore")))
+                        except ValueError:
+                            pass
+                        ascii_buffer.clear()
+                    continue
 
-            # v is a 5-bit mask (bit0..bit4). Update only changed bits.
-            changed = last_value ^ v
-            if changed:
-                with button_states_lock:
-                    for i in range(5):
-                        m = 1 << i
-                        if changed & m:
-                            button_states[i] = bool(v & m)
-                last_value = v
+                if 0x30 <= byte <= 0x39:  # '0'..'9'
+                    ascii_buffer.append(byte)
+                    continue
+
+                # any other junk resets the ASCII buffer
+                if ascii_buffer:
+                    try:
+                        _apply_button_mask(int(ascii_buffer.decode("ascii", "ignore")))
+                    except ValueError:
+                        pass
+                    ascii_buffer.clear()
 
         except serial.SerialException as e:
             print(f"[ERROR] Listener serial exception: {e}")

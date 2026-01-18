@@ -267,6 +267,36 @@ class DXGICamera:
             pass
 
 
+class CaptureCardCamera:
+    def __init__(self, device_index=0):
+        self.device_index = int(device_index) if isinstance(device_index, int) or str(device_index).isdigit() else 0
+        backend = cv2.CAP_DSHOW if hasattr(cv2, "CAP_DSHOW") else 0
+        self.camera = cv2.VideoCapture(self.device_index, backend)
+
+        width = int(getattr(config, "capture_card_width", 0) or 0)
+        height = int(getattr(config, "capture_card_height", 0) or 0)
+        if width > 0:
+            self.camera.set(cv2.CAP_PROP_FRAME_WIDTH, width)
+        if height > 0:
+            self.camera.set(cv2.CAP_PROP_FRAME_HEIGHT, height)
+        self.running = True
+
+    def get_latest_frame(self):
+        if not self.camera.isOpened():
+            return None
+        ok, frame = self.camera.read()
+        if not ok:
+            return None
+        return frame
+
+    def stop(self):
+        self.running = False
+        try:
+            self.camera.release()
+        except Exception:
+            pass
+
+
 
 
 def get_camera():
@@ -282,5 +312,8 @@ def get_camera():
         region = get_region()
         cam = DXGICamera(region)
         return cam, region
+    elif config.capturer_mode.lower() == "capture":
+        cam = CaptureCardCamera(getattr(config, "capture_card_index", 0))
+        return cam, None
     else:
         raise ValueError(f"Unknown capturer_mode: {config.capturer_mode}")
