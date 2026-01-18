@@ -75,7 +75,7 @@ class EventuriGUI(ctk.CTk, GUISections, GUICallbacks):
         self.poll_fps()
 
         # Auto-connect on startup and start polling status
-        self.after(100, lambda: threading.Thread(target=self.on_connect, daemon=True).start())
+        # Defer connection until the user clicks Connect to MAKCU.
         self.after(500, self._poll_connection_status)
 
         # Bind resize event
