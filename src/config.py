@@ -70,6 +70,8 @@ class Config:
         self.capture_range_y = 0
         self.capture_offset_x = 0
         self.capture_offset_y = 0
+        self.game_width = 1920
+        self.game_height = 1080
         self.kmnet_ip = "192.168.2.188"
         self.kmnet_port = "12545"
         self.kmnet_mac = "F101383B"

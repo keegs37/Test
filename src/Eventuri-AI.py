@@ -445,6 +445,19 @@ class EventuriGUI(ctk.CTk, GUISections, GUICallbacks):
         self.capture_fps_entry.grid(row=2, column=1, sticky="w", padx=(5, 15), pady=(8, 0))
         self.capture_fps_entry.insert(0, str(getattr(config, "capture_fps", 240)))
 
+        ctk.CTkLabel(self.capture_block, text="Game Resolution:", font=("Segoe UI", 14), text_color="#ffffff")\
+            .grid(row=3, column=0, sticky="w", padx=15, pady=(8, 0))
+        game_res_wrap = ctk.CTkFrame(self.capture_block, fg_color="transparent")
+        game_res_wrap.grid(row=3, column=1, sticky="w", padx=(5, 15), pady=(8, 0))
+        self.game_res_w_entry = ctk.CTkEntry(game_res_wrap, width=90, justify="center")
+        self.game_res_w_entry.pack(side="left")
+        self.game_res_w_entry.insert(0, str(getattr(config, "game_width", 1920)))
+        ctk.CTkLabel(game_res_wrap, text=" × ", font=("Segoe UI", 14), text_color="#ffffff")\
+            .pack(side="left", padx=6)
+        self.game_res_h_entry = ctk.CTkEntry(game_res_wrap, width=90, justify="center")
+        self.game_res_h_entry.pack(side="left")
+        self.game_res_h_entry.insert(0, str(getattr(config, "game_height", 1080)))
+
         def _commit_capture_settings(event=None):
             try:
                 w = int(self.capture_res_w_entry.get().strip())
@@ -460,9 +473,20 @@ class EventuriGUI(ctk.CTk, GUISections, GUICallbacks):
                 config.capture_width = w
                 config.capture_height = h
                 config.capture_fps = fps
+                try:
+                    game_w = int(self.game_res_w_entry.get().strip())
+                    game_h = int(self.game_res_h_entry.get().strip())
+                    game_w = max(320, min(7680, game_w))
+                    game_h = max(240, min(4320, game_h))
+                    config.game_width = game_w
+                    config.game_height = game_h
+                except Exception:
+                    pass
                 self.capture_res_w_entry.delete(0, "end"); self.capture_res_w_entry.insert(0, str(w))
                 self.capture_res_h_entry.delete(0, "end"); self.capture_res_h_entry.insert(0, str(h))
                 self.capture_fps_entry.delete(0, "end"); self.capture_fps_entry.insert(0, str(fps))
+                self.game_res_w_entry.delete(0, "end"); self.game_res_w_entry.insert(0, str(getattr(config, "game_width", 1920)))
+                self.game_res_h_entry.delete(0, "end"); self.game_res_h_entry.insert(0, str(getattr(config, "game_height", 1080)))
                 self.capture_device_var.set(selection)
                 if hasattr(config, "save") and callable(config.save):
                     config.save()
@@ -470,6 +494,8 @@ class EventuriGUI(ctk.CTk, GUISections, GUICallbacks):
                 self.capture_res_w_entry.delete(0, "end"); self.capture_res_w_entry.insert(0, str(getattr(config, "capture_width", 1920)))
                 self.capture_res_h_entry.delete(0, "end"); self.capture_res_h_entry.insert(0, str(getattr(config, "capture_height", 1080)))
                 self.capture_fps_entry.delete(0, "end"); self.capture_fps_entry.insert(0, str(getattr(config, "capture_fps", 240)))
+                self.game_res_w_entry.delete(0, "end"); self.game_res_w_entry.insert(0, str(getattr(config, "game_width", 1920)))
+                self.game_res_h_entry.delete(0, "end"); self.game_res_h_entry.insert(0, str(getattr(config, "game_height", 1080)))
 
         self.capture_res_w_entry.bind("<Return>", _commit_capture_settings)
         self.capture_res_h_entry.bind("<Return>", _commit_capture_settings)
@@ -478,6 +504,10 @@ class EventuriGUI(ctk.CTk, GUISections, GUICallbacks):
         self.capture_device_menu.bind("<FocusOut>", _commit_capture_settings)
         self.capture_fps_entry.bind("<Return>", _commit_capture_settings)
         self.capture_fps_entry.bind("<FocusOut>", _commit_capture_settings)
+        self.game_res_w_entry.bind("<Return>", _commit_capture_settings)
+        self.game_res_h_entry.bind("<Return>", _commit_capture_settings)
+        self.game_res_w_entry.bind("<FocusOut>", _commit_capture_settings)
+        self.game_res_h_entry.bind("<FocusOut>", _commit_capture_settings)
 
         # Toggles
         self.debug_checkbox = ctk.CTkCheckBox(
@@ -1179,6 +1209,8 @@ class EventuriGUI(ctk.CTk, GUISections, GUICallbacks):
             self.capture_res_w_entry.delete(0, "end"); self.capture_res_w_entry.insert(0, str(getattr(config, "capture_width", 1920)))
             self.capture_res_h_entry.delete(0, "end"); self.capture_res_h_entry.insert(0, str(getattr(config, "capture_height", 1080)))
             self.capture_fps_entry.delete(0, "end"); self.capture_fps_entry.insert(0, str(getattr(config, "capture_fps", 240)))
+            self.game_res_w_entry.delete(0, "end"); self.game_res_w_entry.insert(0, str(getattr(config, "game_width", 1920)))
+            self.game_res_h_entry.delete(0, "end"); self.game_res_h_entry.insert(0, str(getattr(config, "game_height", 1080)))
             self.capture_device_menu.configure(values=self._capture_device_menu_values())
             device_index = int(getattr(config, "capture_device_index", 0))
             for display, actual in self.capture_device_map.items():

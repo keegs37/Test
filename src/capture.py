@@ -320,8 +320,10 @@ class CaptureCardCamera:
         base_h = int(getattr(self.config, "capture_height", 1080))
         config.ndi_width = base_w
         config.ndi_height = base_h
-        config.main_pc_width = base_w
-        config.main_pc_height = base_h
+        game_w = int(getattr(self.config, "game_width", base_w))
+        game_h = int(getattr(self.config, "game_height", base_h))
+        config.main_pc_width = game_w
+        config.main_pc_height = game_h
 
         range_x = int(getattr(self.config, "capture_range_x", 128))
         range_y = int(getattr(self.config, "capture_range_y", 128))

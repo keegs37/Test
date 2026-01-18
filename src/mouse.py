@@ -30,6 +30,13 @@ try:
 except Exception:
     kmNet = None
 
+from config import config
+
+try:
+    import kmNet
+except Exception:
+    kmNet = None
+
 button_states = {i: False for i in range(5)}
 button_states_lock = threading.Lock()
 is_connected = False
@@ -101,8 +108,8 @@ def listen_makcu():
             _set_button_state(0, _read_button("isdown_left"))
             _set_button_state(1, _read_button("isdown_right"))
             _set_button_state(2, _read_button("isdown_middle"))
-            _set_button_state(3, _read_button("isdown_x1") or _read_button("isdown_side4"))
-            _set_button_state(4, _read_button("isdown_x2") or _read_button("isdown_side5"))
+            _set_button_state(3, _read_button("isdown_side1") or _read_button("isdown_x1"))
+            _set_button_state(4, _read_button("isdown_side2") or _read_button("isdown_x2"))
             time.sleep(0.01)
         except Exception:
             time.sleep(0.01)
