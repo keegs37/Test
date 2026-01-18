@@ -1,62 +1,21 @@
 import threading
 import time
 import importlib
-import inspect
+import importlib.util
 
-try:
-    from makcu import create_controller, MouseButton
-except Exception:  # makcu must be installed for mouse support
+from config import config
+
+_makcu_spec = importlib.util.find_spec("makcu")
+if _makcu_spec is not None:
+    _makcu_module = importlib.import_module("makcu")
+    create_controller = getattr(_makcu_module, "create_controller", None)
+    MouseButton = getattr(_makcu_module, "MouseButton", None)
+else:
     create_controller = None
     MouseButton = None
 
-from config import config
-
-try:
-    import kmNet
-except Exception:
-    kmNet = None
-
-from config import config
-
-try:
-    import kmNet
-except Exception:
-    kmNet = None
-
-from config import config
-
-try:
-    import kmNet
-except Exception:
-    kmNet = None
-
-from config import config
-
-try:
-    import kmNet
-except Exception:
-    kmNet = None
-
-from config import config
-
-try:
-    import kmNet
-except Exception:
-    kmNet = None
-
-from config import config
-
-try:
-    import kmNet
-except Exception:
-    kmNet = None
-
-from config import config
-
-try:
-    import kmNet
-except Exception:
-    kmNet = None
+_kmnet_spec = importlib.util.find_spec("kmNet")
+kmNet = importlib.import_module("kmNet") if _kmnet_spec is not None else None
 
 button_states = {i: False for i in range(5)}
 button_states_lock = threading.Lock()
@@ -83,6 +42,8 @@ def _read_button(fn_name: str):
 
 def connect_to_makcu():
     global is_connected
+    if is_connected:
+        return True
     if kmNet is None:
         print("[ERROR] kmNet module not available. Ensure kmNet.pyd is installed in your Python env.")
         return False
@@ -122,7 +83,7 @@ def listen_makcu():
         for i in range(5):
             button_states[i] = False
 
-    callback_enabled = _setup_button_monitoring()
+    _setup_button_monitoring()
 
     while is_connected:
         try:
@@ -148,6 +109,20 @@ def start_listener():
         return
     _listener_thread = threading.Thread(target=listen_makcu, daemon=True)
     _listener_thread.start()
+
+
+def _setup_button_monitoring() -> bool:
+    if not is_connected or kmNet is None:
+        return False
+    monitor_port = int(getattr(config, "kmnet_monitor_port", 0))
+    if not monitor_port:
+        return False
+    try:
+        kmNet.monitor(monitor_port)
+    except Exception as e:
+        print(f"[WARN] kmNet monitor failed: {e}")
+        return False
+    return True
 
 
 def is_button_pressed(idx: int) -> bool:
