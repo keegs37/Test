@@ -1,5 +1,7 @@
 import threading
 import time
+import importlib
+import inspect
 
 try:
     from makcu import create_controller, MouseButton
@@ -99,6 +101,29 @@ def connect_to_makcu():
     return True
 
 
+def _apply_button_mask(v: int):
+    global last_value
+    if not isinstance(v, int) or v < 0 or v > 31:
+        return
+    changed = last_value ^ v
+    if changed:
+        with button_states_lock:
+            for i in range(5):
+                m = 1 << i
+                if changed & m:
+                    button_states[i] = bool(v & m)
+        last_value = v
+
+def _extract_mask_from_line(line: str):
+    matches = re.findall(r"\d+", line)
+    if not matches:
+        return None
+    try:
+        value = int(matches[-1])
+    except ValueError:
+        return None
+    return value if 0 <= value <= 31 else None
+
 def listen_makcu():
     with button_states_lock:
         for i in range(5):
@@ -128,6 +153,15 @@ def start_listener():
     _listener_thread = threading.Thread(target=listen_makcu, daemon=True)
     _listener_thread.start()
 
+
+def start_listener():
+    global listener_thread
+    if not is_connected:
+        return
+    if listener_thread and listener_thread.is_alive():
+        return
+    listener_thread = threading.Thread(target=listen_makcu, daemon=True)
+    listener_thread.start()
 
 def is_button_pressed(idx: int) -> bool:
     with button_states_lock:
@@ -292,6 +326,7 @@ class Mouse:
         except Exception:
             pass
         _mask_applied_idx = None
+        listener_thread = None
 
         is_connected = False
         if makcu is not None:
