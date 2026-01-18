@@ -1,4 +1,5 @@
 import threading
+import re
 import serial
 from serial.tools import list_ports
 import time
@@ -17,7 +18,8 @@ SUPPORTED_DEVICES = [
     ("1A86:5740", "CH347"),
     ("10C4:EA60", "CP2102"),
 ]
-BAUD_RATES = [4_000_000, 2_000_000, 115_200]
+MAKCU_BAUD_RATES = [4_000_000, 2_000_000, 115_200]
+GENERIC_BAUD_RATES = [115_200, 2_000_000, 4_000_000]
 BAUD_CHANGE_COMMAND = bytearray([0xDE, 0xAD, 0x05, 0x00, 0xA5, 0x00, 0x09, 0x3D, 0x00])
 
 def find_com_ports():
@@ -59,7 +61,7 @@ def connect_to_makcu():
 
     for port_name, dev_name in ports:
         if dev_name == "MAKCU":
-            for baud in BAUD_RATES:
+            for baud in MAKCU_BAUD_RATES:
                 print(f"[INFO] Probing MAKCU {port_name} @ {baud} with km.version()...")
                 ser = None
                 try:
@@ -136,7 +138,7 @@ def connect_to_makcu():
                     makcu = None
                     is_connected = False
         else:
-            for baud in BAUD_RATES:
+            for baud in GENERIC_BAUD_RATES:
                 print(f"[INFO] Trying {dev_name} {port_name} @ {baud} ...")
                 ser = None
                 try:
