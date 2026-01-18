@@ -60,6 +60,7 @@ class Config:
         self.capture_card_index = 0
         self.capture_card_width = 0
         self.capture_card_height = 0
+        self.capture_card_device_name = ""
 
         # --- Model and Detection ---
         self.models_dir = "models"
