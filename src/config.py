@@ -57,6 +57,10 @@ class Config:
         self.always_on_aim = False
         self.main_pc_width = 1920  # Default width for main PC
         self.main_pc_height = 1080  # Default height for main PC
+        self.capture_card_index = 0
+        self.capture_card_width = 0
+        self.capture_card_height = 0
+        self.capture_card_device_name = ""
 
         # --- Model and Detection ---
         self.models_dir = "models"
