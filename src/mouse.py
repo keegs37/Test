@@ -185,16 +185,6 @@ def _apply_button_mask(v: int):
                     button_states[i] = bool(v & m)
         last_value = v
 
-def _extract_mask_from_line(line: str):
-    matches = re.findall(r"\d+", line)
-    if not matches:
-        return None
-    try:
-        value = int(matches[-1])
-    except ValueError:
-        return None
-    return value if 0 <= value <= 31 else None
-
 def listen_makcu():
     global last_value
     # start from a clean state
@@ -219,28 +209,26 @@ def listen_makcu():
                     _apply_button_mask(byte)
                     continue
 
-                # handle ASCII-encoded mask lines like "31\r\n" or "Buttons: 31"
+                # handle ASCII-encoded mask lines like "31\r\n"
                 if byte in (0x0A, 0x0D):
                     if ascii_buffer:
-                        line = ascii_buffer.decode("ascii", "ignore")
-                        value = _extract_mask_from_line(line)
-                        if value is not None:
-                            _apply_button_mask(value)
+                        try:
+                            _apply_button_mask(int(ascii_buffer.decode("ascii", "ignore")))
+                        except ValueError:
+                            pass
                         ascii_buffer.clear()
                     continue
 
-                # collect printable ASCII to parse line-based outputs
-                if 0x20 <= byte <= 0x7E:
-                    if len(ascii_buffer) < 64:
-                        ascii_buffer.append(byte)
+                if 0x30 <= byte <= 0x39:  # '0'..'9'
+                    ascii_buffer.append(byte)
                     continue
 
                 # any other junk resets the ASCII buffer
                 if ascii_buffer:
-                    line = ascii_buffer.decode("ascii", "ignore")
-                    value = _extract_mask_from_line(line)
-                    if value is not None:
-                        _apply_button_mask(value)
+                    try:
+                        _apply_button_mask(int(ascii_buffer.decode("ascii", "ignore")))
+                    except ValueError:
+                        pass
                     ascii_buffer.clear()
 
         except serial.SerialException as e:

@@ -371,12 +371,6 @@ class EventuriGUI(ctk.CTk, GUISections, GUICallbacks):
         self.capture_res_h_entry.pack(side="left")
         self.capture_res_h_entry.insert(0, str(getattr(config, "capture_card_height", 0)))
 
-        ctk.CTkLabel(self.capture_block, text="Capture Device Name (optional):", font=("Segoe UI", 14), text_color="#ffffff")\
-            .grid(row=2, column=0, sticky="w", padx=15, pady=(8, 0))
-        self.capture_name_entry = ctk.CTkEntry(self.capture_block, width=240)
-        self.capture_name_entry.grid(row=2, column=1, sticky="w", padx=(5, 15), pady=(8, 0))
-        self.capture_name_entry.insert(0, str(getattr(config, "capture_card_device_name", "")))
-
         def _commit_capture_settings(event=None):
             try:
                 idx = int(self.capture_index_entry.get().strip())
@@ -385,22 +379,18 @@ class EventuriGUI(ctk.CTk, GUISections, GUICallbacks):
                 h = int(self.capture_res_h_entry.get().strip())
                 w = max(0, min(7680, w))
                 h = max(0, min(4320, h))
-                name = self.capture_name_entry.get().strip()
                 config.capture_card_index = idx
                 config.capture_card_width = w
                 config.capture_card_height = h
-                config.capture_card_device_name = name
                 self.capture_index_entry.delete(0, "end"); self.capture_index_entry.insert(0, str(idx))
                 self.capture_res_w_entry.delete(0, "end"); self.capture_res_w_entry.insert(0, str(w))
                 self.capture_res_h_entry.delete(0, "end"); self.capture_res_h_entry.insert(0, str(h))
-                self.capture_name_entry.delete(0, "end"); self.capture_name_entry.insert(0, name)
                 if hasattr(config, "save") and callable(config.save):
                     config.save()
             except Exception:
                 self.capture_index_entry.delete(0, "end"); self.capture_index_entry.insert(0, str(getattr(config, "capture_card_index", 0)))
                 self.capture_res_w_entry.delete(0, "end"); self.capture_res_w_entry.insert(0, str(getattr(config, "capture_card_width", 0)))
                 self.capture_res_h_entry.delete(0, "end"); self.capture_res_h_entry.insert(0, str(getattr(config, "capture_card_height", 0)))
-                self.capture_name_entry.delete(0, "end"); self.capture_name_entry.insert(0, str(getattr(config, "capture_card_device_name", "")))
 
         self.capture_index_entry.bind("<Return>", _commit_capture_settings)
         self.capture_index_entry.bind("<FocusOut>", _commit_capture_settings)
@@ -408,8 +398,6 @@ class EventuriGUI(ctk.CTk, GUISections, GUICallbacks):
         self.capture_res_h_entry.bind("<Return>", _commit_capture_settings)
         self.capture_res_w_entry.bind("<FocusOut>", _commit_capture_settings)
         self.capture_res_h_entry.bind("<FocusOut>", _commit_capture_settings)
-        self.capture_name_entry.bind("<Return>", _commit_capture_settings)
-        self.capture_name_entry.bind("<FocusOut>", _commit_capture_settings)
 
         # Toggles
         self.debug_checkbox = ctk.CTkCheckBox(
@@ -472,7 +460,6 @@ class EventuriGUI(ctk.CTk, GUISections, GUICallbacks):
             self.capture_index_entry.configure(state=state)
             self.capture_res_w_entry.configure(state=state)
             self.capture_res_h_entry.configure(state=state)
-            self.capture_name_entry.configure(state=state)
         except Exception:
             pass
 
@@ -1053,7 +1040,6 @@ class EventuriGUI(ctk.CTk, GUISections, GUICallbacks):
             self.capture_index_entry.delete(0, "end"); self.capture_index_entry.insert(0, str(getattr(config, "capture_card_index", 0)))
             self.capture_res_w_entry.delete(0, "end"); self.capture_res_w_entry.insert(0, str(getattr(config, "capture_card_width", 0)))
             self.capture_res_h_entry.delete(0, "end"); self.capture_res_h_entry.insert(0, str(getattr(config, "capture_card_height", 0)))
-            self.capture_name_entry.delete(0, "end"); self.capture_name_entry.insert(0, str(getattr(config, "capture_card_device_name", "")))
         except Exception:
             pass
 
