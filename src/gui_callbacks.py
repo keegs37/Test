@@ -3,7 +3,7 @@ import customtkinter as ctk
 from tkinter import messagebox
 import main
 from main import start_aimbot, stop_aimbot, is_aimbot_running, reload_model, get_model_classes, get_model_size
-from mouse import connect_to_makcu, button_states, button_states_lock
+from mouse import connect_to_makcu, start_listener, button_states, button_states_lock
 import os
 import glob
 import cv2
@@ -47,6 +47,7 @@ class GUICallbacks:
 
     def on_connect(self):
         if connect_to_makcu():
+            start_listener()
             self.error_text.set("")
         else:
             self.error_text.set("Failed to connect! " + config.makcu_status_msg)

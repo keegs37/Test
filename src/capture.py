@@ -4,6 +4,9 @@ import mss
 import cv2
 import dxcam
 from config import config
+import ctypes
+import subprocess
+import sys
 
 # NDI imports
 from cyndilib.wrapper.ndi_recv import RecvColorFormat, RecvBandwidth
@@ -267,6 +270,99 @@ class DXGICamera:
             pass
 
 
+class CaptureCardCamera:
+    def __init__(self, device_index=0, device_name=None):
+        self.device_index = int(device_index) if isinstance(device_index, int) or str(device_index).isdigit() else 0
+        self.device_name = (device_name or "").strip()
+        backend = cv2.CAP_DSHOW if hasattr(cv2, "CAP_DSHOW") else 0
+        if self.device_name:
+            self.camera = cv2.VideoCapture(f"video={self.device_name}", backend)
+            if not self.camera.isOpened():
+                self.camera.release()
+                if self.device_index != 0:
+                    self.camera = cv2.VideoCapture(self.device_index, backend)
+                else:
+                    self.camera = cv2.VideoCapture()
+        else:
+            self.camera = cv2.VideoCapture(self.device_index, backend)
+
+        width = int(getattr(config, "capture_card_width", 0) or 0)
+        height = int(getattr(config, "capture_card_height", 0) or 0)
+        if width > 0:
+            self.camera.set(cv2.CAP_PROP_FRAME_WIDTH, width)
+        if height > 0:
+            self.camera.set(cv2.CAP_PROP_FRAME_HEIGHT, height)
+        self.running = True
+
+    def get_latest_frame(self):
+        if not self.camera.isOpened():
+            return None
+        ok, frame = self.camera.read()
+        if not ok:
+            return None
+        return frame
+
+    def stop(self):
+        self.running = False
+        try:
+            self.camera.release()
+        except Exception:
+            pass
+
+
+def _get_pnp_camera_names():
+    if sys.platform != "win32":
+        return []
+    commands = [
+        ["powershell", "-NoProfile", "-Command", "Get-PnpDevice -Class Camera | Select-Object -ExpandProperty FriendlyName"],
+        ["powershell", "-NoProfile", "-Command", "Get-PnpDevice -Class Image | Select-Object -ExpandProperty FriendlyName"],
+    ]
+    for cmd in commands:
+        try:
+            output = subprocess.check_output(cmd, text=True, stderr=subprocess.DEVNULL)
+        except Exception:
+            continue
+        names = [line.strip() for line in output.splitlines() if line.strip()]
+        if names:
+            return names
+    return []
+
+def list_capture_devices(max_devices=20):
+    devices = []
+    try:
+        cap_get_desc = ctypes.windll.avicap32.capGetDriverDescriptionA
+    except Exception:
+        cap_get_desc = None
+
+    if cap_get_desc:
+        for idx in range(max_devices):
+            name_buf = ctypes.create_string_buffer(256)
+            desc_buf = ctypes.create_string_buffer(256)
+            if cap_get_desc(idx, name_buf, 256, desc_buf, 256):
+                try:
+                    name = name_buf.value.decode("utf-8", "ignore").strip()
+                    desc = desc_buf.value.decode("utf-8", "ignore").strip()
+                except Exception:
+                    name = ""
+                    desc = ""
+                if name:
+                    devices.append((name, desc))
+
+    pnp_names = _get_pnp_camera_names()
+    for name in pnp_names:
+        devices.append((name, "PnP"))
+
+    seen = set()
+    unique = []
+    for name, desc in devices:
+        key = (name, desc)
+        if key in seen:
+            continue
+        seen.add(key)
+        unique.append((name, desc))
+    return unique
+
+
 
 
 def get_camera():
@@ -282,5 +378,11 @@ def get_camera():
         region = get_region()
         cam = DXGICamera(region)
         return cam, region
+    elif config.capturer_mode.lower() == "capture":
+        cam = CaptureCardCamera(
+            getattr(config, "capture_card_index", 0),
+            getattr(config, "capture_card_device_name", ""),
+        )
+        return cam, None
     else:
         raise ValueError(f"Unknown capturer_mode: {config.capturer_mode}")
