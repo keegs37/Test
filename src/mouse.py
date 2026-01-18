@@ -3,9 +3,13 @@ import re
 import serial
 from serial.tools import list_ports
 import time
+import importlib
+import inspect
 
 makcu = None
 makcu_lock = threading.Lock()
+makcu_device = None
+makcu_buttons_enabled = False
 button_states = {i: False for i in range(5)}
 button_states_lock = threading.Lock()
 is_connected = False
@@ -72,14 +76,121 @@ def init_kmbox(ser):
     except Exception as e:
         print(f"[WARN] init_kmbox buttons: {e}")
 
+def _call_with_supported_kwargs(fn, **kwargs):
+    try:
+        params = inspect.signature(fn).parameters
+    except Exception:
+        return fn()
+    supported = {k: v for k, v in kwargs.items() if k in params}
+    return fn(**supported)
+
+def _get_makcu_lib_device(port, baud):
+    try:
+        makcu_lib = importlib.import_module("makcu")
+    except Exception:
+        return None, None
+    create_controller = getattr(makcu_lib, "create_controller", None)
+    mouse_button = getattr(makcu_lib, "MouseButton", None)
+    if not callable(create_controller):
+        return None, None
+    kwargs = {
+        "port": port,
+        "baudrate": baud,
+        "baud": baud,
+        "auto_reconnect": True,
+        "debug": False,
+    }
+    try:
+        controller = _call_with_supported_kwargs(create_controller, **kwargs)
+    except Exception:
+        return None, None
+    return controller, mouse_button
+
+def _read_buttons_from_device(dev):
+    for attr in ("get_button_states", "get_buttons", "buttons", "read_buttons", "get_button_mask"):
+        fn = getattr(dev, attr, None)
+        if callable(fn):
+            try:
+                value = fn()
+            except Exception:
+                continue
+            if isinstance(value, int):
+                return value
+            if isinstance(value, (list, tuple)) and len(value) >= 5:
+                mask = 0
+                for i, v in enumerate(value[:5]):
+                    if bool(v):
+                        mask |= 1 << i
+                return mask
+            if isinstance(value, dict):
+                if "mask" in value and isinstance(value["mask"], int):
+                    return value["mask"]
+                if "buttons" in value and isinstance(value["buttons"], (list, tuple)):
+                    mask = 0
+                    for i, v in enumerate(value["buttons"][:5]):
+                        if bool(v):
+                            mask |= 1 << i
+                    return mask
+    return None
+
+def _set_button_state(idx, pressed):
+    with button_states_lock:
+        button_states[idx] = bool(pressed)
+
+def _setup_makcu_button_monitoring(controller, mouse_button):
+    global makcu_buttons_enabled
+    if controller is None:
+        return
+    if mouse_button is None:
+        return
+
+    mapping = {
+        getattr(mouse_button, "LEFT", None): 0,
+        getattr(mouse_button, "RIGHT", None): 1,
+        getattr(mouse_button, "MIDDLE", None): 2,
+        getattr(mouse_button, "MOUSE4", None): 3,
+        getattr(mouse_button, "MOUSE5", None): 4,
+    }
+
+    def _on_button_event(button, pressed):
+        idx = mapping.get(button)
+        if idx is None and hasattr(button, "name"):
+            name = str(button.name).upper()
+            name_map = {"LEFT": 0, "RIGHT": 1, "MIDDLE": 2, "MOUSE4": 3, "MOUSE5": 4}
+            idx = name_map.get(name)
+        if idx is not None:
+            _set_button_state(idx, pressed)
+
+    set_callback = getattr(controller, "set_button_callback", None)
+    if callable(set_callback):
+        try:
+            set_callback(_on_button_event)
+        except Exception:
+            pass
+
+    enable_monitoring = getattr(controller, "enable_button_monitoring", None)
+    if callable(enable_monitoring):
+        try:
+            enable_monitoring(True)
+            makcu_buttons_enabled = True
+        except Exception:
+            makcu_buttons_enabled = False
+
 def connect_to_makcu():
-    global makcu, is_connected
+    global makcu, makcu_device, makcu_buttons_enabled, is_connected
     ports = find_com_ports()
     if not ports:
         print("[ERROR] No supported serial devices found.")
         return False
 
     for port_name, dev_name in ports:
+        for baud in (4_000_000, 115_200):
+            makcu_device, mouse_button = _get_makcu_lib_device(port_name, baud)
+            if makcu_device:
+                _setup_makcu_button_monitoring(makcu_device, mouse_button)
+                is_connected = True
+                print(f"[INFO] Connected to {dev_name} on {port_name} with makcu library.")
+                return True
         if dev_name == "MAKCU":
             for baud in MAKCU_BAUD_RATES:
                 print(f"[INFO] Probing MAKCU {port_name} @ {baud} with km.version()...")
@@ -162,6 +273,12 @@ def connect_to_makcu():
                 print(f"[INFO] Trying {dev_name} {port_name} @ {baud} ...")
                 ser = None
                 try:
+                    makcu_device, mouse_button = _get_makcu_lib_device(port_name, baud)
+                    if makcu_device:
+                        _setup_makcu_button_monitoring(makcu_device, mouse_button)
+                        is_connected = True
+                        print(f"[INFO] Connected to {dev_name} on {port_name} with makcu library.")
+                        return True
                     ser = serial.Serial(port_name, baud, timeout=0.1)
                     with makcu_lock:
                         init_kmbox(ser)
@@ -182,6 +299,8 @@ def connect_to_makcu():
                     if makcu and makcu.is_open:
                         makcu.close()
                     makcu = None
+                    makcu_device = None
+                    makcu_buttons_enabled = False
                     is_connected = False
 
     print("[ERROR] Could not connect to any supported device.")
@@ -227,6 +346,13 @@ def listen_makcu():
 
     while is_connected:
         try:
+            if makcu_device is not None:
+                if not makcu_buttons_enabled:
+                    value = _read_buttons_from_device(makcu_device)
+                    if value is not None:
+                        _apply_button_mask(value)
+                time.sleep(0.01)
+                continue
             chunk = makcu.read(makcu.in_waiting or 1)  # blocking read (uses port timeout)
             if not chunk:
                 continue
@@ -305,6 +431,11 @@ def is_button_pressed(idx: int) -> bool:
 
 def test_move():
     if is_connected:
+        if makcu_device is not None:
+            move_fn = getattr(makcu_device, "move", None)
+            if callable(move_fn):
+                move_fn(100, 100)
+                return
         with makcu_lock:
             makcu.write(b"km.move(100,100)\r")
             makcu.flush()
@@ -329,6 +460,34 @@ def _send_cmd_no_wait(cmd: str):
     """Send 'km.<cmd>\\r' without waiting for response (listener ignores ASCII)."""
     if not is_connected:
         return
+    if makcu_device is not None:
+        send_fn = getattr(makcu_device, "send", None)
+        if callable(send_fn):
+            try:
+                send_fn(f"km.{cmd}")
+                return
+            except Exception:
+                pass
+        if cmd.startswith("lock_") or cmd.endswith("(1)") or cmd.endswith("(0)"):
+            lock_fn = getattr(makcu_device, "lock", None)
+            unlock_fn = getattr(makcu_device, "unlock", None)
+            if callable(lock_fn) or callable(unlock_fn):
+                suffix = cmd.split("(")[-1].rstrip(")")
+                enable = suffix == "1"
+                target = cmd.split("(")[0]
+                target = target.replace("lock_", "").upper()
+                if enable and callable(lock_fn):
+                    try:
+                        lock_fn(target)
+                        return
+                    except Exception:
+                        pass
+                if not enable and callable(unlock_fn):
+                    try:
+                        unlock_fn(target)
+                        return
+                    except Exception:
+                        pass
     with makcu_lock:
         makcu.write(f"km.{cmd}\r".encode("ascii", "ignore"))
         makcu.flush()
@@ -407,6 +566,11 @@ class Mouse:
         if not is_connected:
             return
         dx, dy = int(x), int(y)
+        if makcu_device is not None:
+            move_fn = getattr(makcu_device, "move", None)
+            if callable(move_fn):
+                move_fn(dx, dy)
+                return
         with makcu_lock:
             makcu.write(f"km.move({dx},{dy})\r".encode())
             makcu.flush()
@@ -414,6 +578,15 @@ class Mouse:
     def move_bezier(self, x: float, y: float, segments: int, ctrl_x: float, ctrl_y: float):
         if not is_connected:
             return
+        if makcu_device is not None:
+            move_fn = getattr(makcu_device, "move_bezier", None)
+            if callable(move_fn):
+                move_fn(int(x), int(y), int(segments), int(ctrl_x), int(ctrl_y))
+                return
+            move_fn = getattr(makcu_device, "move_smooth", None)
+            if callable(move_fn):
+                move_fn(int(x), int(y), int(segments))
+                return
         with makcu_lock:
             cmd = f"km.move({int(x)},{int(y)},{int(segments)},{int(ctrl_x)},{int(ctrl_y)})\r"
             makcu.write(cmd.encode())
@@ -422,6 +595,11 @@ class Mouse:
     def click(self):
         if not is_connected:
             return
+        if makcu_device is not None:
+            click_fn = getattr(makcu_device, "click", None)
+            if callable(click_fn):
+                click_fn()
+                return
         with makcu_lock:
             makcu.write(b"km.left(1)\r")
             makcu.flush()
@@ -435,7 +613,7 @@ class Mouse:
 
     @staticmethod
     def cleanup():
-        global is_connected, makcu, _mask_applied_idx, listener_thread
+        global is_connected, makcu, makcu_device, _mask_applied_idx, listener_thread
         # Always release any locks before closing port
         try:
             unlock_all_locks()
@@ -445,6 +623,15 @@ class Mouse:
         listener_thread = None
 
         is_connected = False
+        if makcu_device is not None:
+            for fn_name in ("close", "disconnect", "stop"):
+                fn = getattr(makcu_device, fn_name, None)
+                if callable(fn):
+                    try:
+                        fn()
+                    except Exception:
+                        pass
+            makcu_device = None
         if makcu and makcu.is_open:
             makcu.close()
         Mouse._instance = None

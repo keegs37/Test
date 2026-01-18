@@ -5,6 +5,8 @@ import cv2
 import dxcam
 from config import config
 import ctypes
+import subprocess
+import sys
 
 # NDI imports
 from cyndilib.wrapper.ndi_recv import RecvColorFormat, RecvBandwidth
@@ -308,26 +310,57 @@ class CaptureCardCamera:
             pass
 
 
+def _get_pnp_camera_names():
+    if sys.platform != "win32":
+        return []
+    commands = [
+        ["powershell", "-NoProfile", "-Command", "Get-PnpDevice -Class Camera | Select-Object -ExpandProperty FriendlyName"],
+        ["powershell", "-NoProfile", "-Command", "Get-PnpDevice -Class Image | Select-Object -ExpandProperty FriendlyName"],
+    ]
+    for cmd in commands:
+        try:
+            output = subprocess.check_output(cmd, text=True, stderr=subprocess.DEVNULL)
+        except Exception:
+            continue
+        names = [line.strip() for line in output.splitlines() if line.strip()]
+        if names:
+            return names
+    return []
+
 def list_capture_devices(max_devices=20):
     devices = []
     try:
         cap_get_desc = ctypes.windll.avicap32.capGetDriverDescriptionA
     except Exception:
-        return devices
+        cap_get_desc = None
 
-    for idx in range(max_devices):
-        name_buf = ctypes.create_string_buffer(256)
-        desc_buf = ctypes.create_string_buffer(256)
-        if cap_get_desc(idx, name_buf, 256, desc_buf, 256):
-            try:
-                name = name_buf.value.decode("utf-8", "ignore").strip()
-                desc = desc_buf.value.decode("utf-8", "ignore").strip()
-            except Exception:
-                name = ""
-                desc = ""
-            if name:
-                devices.append((name, desc))
-    return devices
+    if cap_get_desc:
+        for idx in range(max_devices):
+            name_buf = ctypes.create_string_buffer(256)
+            desc_buf = ctypes.create_string_buffer(256)
+            if cap_get_desc(idx, name_buf, 256, desc_buf, 256):
+                try:
+                    name = name_buf.value.decode("utf-8", "ignore").strip()
+                    desc = desc_buf.value.decode("utf-8", "ignore").strip()
+                except Exception:
+                    name = ""
+                    desc = ""
+                if name:
+                    devices.append((name, desc))
+
+    pnp_names = _get_pnp_camera_names()
+    for name in pnp_names:
+        devices.append((name, "PnP"))
+
+    seen = set()
+    unique = []
+    for name, desc in devices:
+        key = (name, desc)
+        if key in seen:
+            continue
+        seen.add(key)
+        unique.append((name, desc))
+    return unique
 
 
 
