@@ -48,7 +48,7 @@ class GUICallbacks:
             self.kmnet_ip_entry.delete(0, "end"); self.kmnet_ip_entry.insert(0, str(getattr(config, "kmnet_ip", "")))
             self.kmnet_port_entry.delete(0, "end"); self.kmnet_port_entry.insert(0, str(getattr(config, "kmnet_port", "")))
             self.kmnet_mac_entry.delete(0, "end"); self.kmnet_mac_entry.insert(0, str(getattr(config, "kmnet_mac", "")))
-            self.kmnet_monitor_entry.delete(0, "end"); self.kmnet_monitor_entry.insert(0, str(getattr(config, "kmnet_monitor_port", 8888)))
+            self.kmnet_monitor_entry.delete(0, "end"); self.kmnet_monitor_entry.insert(0, str(getattr(config, "kmnet_monitor_port", 10000)))
         except Exception:
             pass
 

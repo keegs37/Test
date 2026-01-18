@@ -293,7 +293,7 @@ class EventuriGUI(ctk.CTk, GUISections, GUICallbacks):
             .grid(row=1, column=2, sticky="w", padx=(0, 8), pady=(0, 6))
         self.kmnet_monitor_entry = ctk.CTkEntry(kmnet_frame, width=90, justify="center")
         self.kmnet_monitor_entry.grid(row=1, column=3, sticky="w", padx=(0, 15), pady=(0, 6))
-        self.kmnet_monitor_entry.insert(0, str(getattr(config, "kmnet_monitor_port", 8888)))
+        self.kmnet_monitor_entry.insert(0, str(getattr(config, "kmnet_monitor_port", 10000)))
 
         def _commit_kmnet(event=None):
             ip = self.kmnet_ip_entry.get().strip()
@@ -302,7 +302,7 @@ class EventuriGUI(ctk.CTk, GUISections, GUICallbacks):
             try:
                 monitor_port = int(self.kmnet_monitor_entry.get().strip())
             except Exception:
-                monitor_port = getattr(config, "kmnet_monitor_port", 8888)
+                monitor_port = getattr(config, "kmnet_monitor_port", 10000)
 
             config.kmnet_ip = ip
             config.kmnet_port = port
@@ -1201,7 +1201,7 @@ class EventuriGUI(ctk.CTk, GUISections, GUICallbacks):
             self.kmnet_ip_entry.delete(0, "end"); self.kmnet_ip_entry.insert(0, str(getattr(config, "kmnet_ip", "")))
             self.kmnet_port_entry.delete(0, "end"); self.kmnet_port_entry.insert(0, str(getattr(config, "kmnet_port", "")))
             self.kmnet_mac_entry.delete(0, "end"); self.kmnet_mac_entry.insert(0, str(getattr(config, "kmnet_mac", "")))
-            self.kmnet_monitor_entry.delete(0, "end"); self.kmnet_monitor_entry.insert(0, str(getattr(config, "kmnet_monitor_port", 8888)))
+            self.kmnet_monitor_entry.delete(0, "end"); self.kmnet_monitor_entry.insert(0, str(getattr(config, "kmnet_monitor_port", 10000)))
         except Exception:
             pass
 

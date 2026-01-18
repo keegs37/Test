@@ -332,6 +332,9 @@ class CaptureCardCamera:
         if range_y < 128:
             range_y = max(128, getattr(self.config, "region_size", 200))
 
+        config.ndi_width = range_x
+        config.ndi_height = range_y
+
         offset_x = int(getattr(self.config, "capture_offset_x", 0))
         offset_y = int(getattr(self.config, "capture_offset_y", 0))
 

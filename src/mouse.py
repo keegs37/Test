@@ -51,6 +51,13 @@ try:
 except Exception:
     kmNet = None
 
+from config import config
+
+try:
+    import kmNet
+except Exception:
+    kmNet = None
+
 button_states = {i: False for i in range(5)}
 button_states_lock = threading.Lock()
 is_connected = False

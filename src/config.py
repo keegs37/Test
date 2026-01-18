@@ -75,7 +75,7 @@ class Config:
         self.kmnet_ip = "192.168.2.188"
         self.kmnet_port = "12545"
         self.kmnet_mac = "F101383B"
-        self.kmnet_monitor_port = 8888
+        self.kmnet_monitor_port = 10000
 
         # --- Model and Detection ---
         self.models_dir = "models"
