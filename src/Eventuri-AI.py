@@ -378,14 +378,20 @@ class EventuriGUI(ctk.CTk, GUISections, GUICallbacks):
 
         self.capture_res_w_entry = ctk.CTkEntry(cap_res_wrap, width=90, justify="center")
         self.capture_res_w_entry.pack(side="left")
-        self.capture_res_w_entry.insert(0, str(getattr(config, "capture_card_width", 0)))
+        self.capture_res_w_entry.insert(0, str(getattr(config, "capture_width", 1920)))
 
         ctk.CTkLabel(cap_res_wrap, text=" × ", font=("Segoe UI", 14), text_color="#ffffff")\
             .pack(side="left", padx=6)
 
         self.capture_res_h_entry = ctk.CTkEntry(cap_res_wrap, width=90, justify="center")
         self.capture_res_h_entry.pack(side="left")
-        self.capture_res_h_entry.insert(0, str(getattr(config, "capture_card_height", 0)))
+        self.capture_res_h_entry.insert(0, str(getattr(config, "capture_height", 1080)))
+
+        ctk.CTkLabel(self.capture_block, text="Capture FPS:", font=("Segoe UI", 14), text_color="#ffffff")\
+            .grid(row=2, column=0, sticky="w", padx=15, pady=(8, 0))
+        self.capture_fps_entry = ctk.CTkEntry(self.capture_block, width=90, justify="center")
+        self.capture_fps_entry.grid(row=2, column=1, sticky="w", padx=(5, 15), pady=(8, 0))
+        self.capture_fps_entry.insert(0, str(getattr(config, "capture_fps", 240)))
 
         def _commit_capture_settings(event=None):
             try:
@@ -393,27 +399,33 @@ class EventuriGUI(ctk.CTk, GUISections, GUICallbacks):
                 h = int(self.capture_res_h_entry.get().strip())
                 w = max(0, min(7680, w))
                 h = max(0, min(4320, h))
+                fps = float(self.capture_fps_entry.get().strip())
+                fps = max(1, min(300, fps))
                 selection = self.capture_device_var.get().strip()
-                name = self.capture_device_map.get(selection, selection)
-                config.capture_card_index = 0
-                config.capture_card_width = w
-                config.capture_card_height = h
-                config.capture_card_device_name = name
+                device_index = self.capture_device_map.get(selection, -1)
+                if device_index >= 0:
+                    config.capture_device_index = device_index
+                config.capture_width = w
+                config.capture_height = h
+                config.capture_fps = fps
                 self.capture_res_w_entry.delete(0, "end"); self.capture_res_w_entry.insert(0, str(w))
                 self.capture_res_h_entry.delete(0, "end"); self.capture_res_h_entry.insert(0, str(h))
+                self.capture_fps_entry.delete(0, "end"); self.capture_fps_entry.insert(0, str(fps))
                 self.capture_device_var.set(selection)
                 if hasattr(config, "save") and callable(config.save):
                     config.save()
             except Exception:
-                self.capture_res_w_entry.delete(0, "end"); self.capture_res_w_entry.insert(0, str(getattr(config, "capture_card_width", 0)))
-                self.capture_res_h_entry.delete(0, "end"); self.capture_res_h_entry.insert(0, str(getattr(config, "capture_card_height", 0)))
-                self.capture_device_var.set(str(getattr(config, "capture_card_device_name", "")))
+                self.capture_res_w_entry.delete(0, "end"); self.capture_res_w_entry.insert(0, str(getattr(config, "capture_width", 1920)))
+                self.capture_res_h_entry.delete(0, "end"); self.capture_res_h_entry.insert(0, str(getattr(config, "capture_height", 1080)))
+                self.capture_fps_entry.delete(0, "end"); self.capture_fps_entry.insert(0, str(getattr(config, "capture_fps", 240)))
 
         self.capture_res_w_entry.bind("<Return>", _commit_capture_settings)
         self.capture_res_h_entry.bind("<Return>", _commit_capture_settings)
         self.capture_res_w_entry.bind("<FocusOut>", _commit_capture_settings)
         self.capture_res_h_entry.bind("<FocusOut>", _commit_capture_settings)
         self.capture_device_menu.bind("<FocusOut>", _commit_capture_settings)
+        self.capture_fps_entry.bind("<Return>", _commit_capture_settings)
+        self.capture_fps_entry.bind("<FocusOut>", _commit_capture_settings)
 
         # Toggles
         self.debug_checkbox = ctk.CTkCheckBox(
@@ -432,18 +444,21 @@ class EventuriGUI(ctk.CTk, GUISections, GUICallbacks):
         devices = list_capture_devices()
         self.capture_device_map = {}
         values = []
-        for name, desc in devices:
-            display = f"{name} ({desc})" if desc and desc != name else name
+        for idx, name, desc in devices:
+            if idx >= 0:
+                display = f"{idx}: {name} ({desc})" if desc and desc != name else f"{idx}: {name}"
+                self.capture_device_map[display] = idx
+            else:
+                display = f"{name} ({desc})" if desc else name
             values.append(display)
-            self.capture_device_map[display] = name
         return values if values else ["(no capture devices found)"]
 
     def _initial_capture_device_value(self):
-        name = getattr(config, "capture_card_device_name", "")
+        index = int(getattr(config, "capture_device_index", 0))
         devices = self._capture_device_menu_values()
-        if name:
+        if index >= 0:
             for display, actual in self.capture_device_map.items():
-                if actual == name:
+                if actual == index:
                     return display
         return devices[0] if devices else "(no capture devices found)"
 
@@ -458,13 +473,17 @@ class EventuriGUI(ctk.CTk, GUISections, GUICallbacks):
             selection = values[0]
             self.capture_device_var.set(selection)
         if not selection.startswith("("):
-            config.capture_card_device_name = self.capture_device_map.get(selection, selection)
+            device_index = self.capture_device_map.get(selection, -1)
+            if device_index >= 0:
+                config.capture_device_index = device_index
             if hasattr(config, "save") and callable(config.save):
                 config.save()
 
     def _on_capture_device_change(self, value):
         if value and not value.startswith("("):
-            config.capture_card_device_name = self.capture_device_map.get(value, value)
+            device_index = self.capture_device_map.get(value, -1)
+            if device_index >= 0:
+                config.capture_device_index = device_index
             if hasattr(config, "save") and callable(config.save):
                 config.save()
 
@@ -1096,15 +1115,15 @@ class EventuriGUI(ctk.CTk, GUISections, GUICallbacks):
 
         # Capture card entries
         try:
-            self.capture_res_w_entry.delete(0, "end"); self.capture_res_w_entry.insert(0, str(getattr(config, "capture_card_width", 0)))
-            self.capture_res_h_entry.delete(0, "end"); self.capture_res_h_entry.insert(0, str(getattr(config, "capture_card_height", 0)))
+            self.capture_res_w_entry.delete(0, "end"); self.capture_res_w_entry.insert(0, str(getattr(config, "capture_width", 1920)))
+            self.capture_res_h_entry.delete(0, "end"); self.capture_res_h_entry.insert(0, str(getattr(config, "capture_height", 1080)))
+            self.capture_fps_entry.delete(0, "end"); self.capture_fps_entry.insert(0, str(getattr(config, "capture_fps", 240)))
             self.capture_device_menu.configure(values=self._capture_device_menu_values())
-            device_name = str(getattr(config, "capture_card_device_name", ""))
-            if device_name:
-                for display, actual in self.capture_device_map.items():
-                    if actual == device_name:
-                        self.capture_device_var.set(display)
-                        break
+            device_index = int(getattr(config, "capture_device_index", 0))
+            for display, actual in self.capture_device_map.items():
+                if actual == device_index:
+                    self.capture_device_var.set(display)
+                    break
         except Exception:
             pass
 
