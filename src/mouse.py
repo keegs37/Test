@@ -53,6 +53,25 @@ def km_version_ok(ser):
         print(f"[WARN] km_version_ok: {e}")
         return False
 
+def init_kmbox(ser):
+    try:
+        ser.reset_input_buffer()
+        ser.write(b"import km\r\n")
+        ser.flush()
+        time.sleep(0.01)
+        if ser.in_waiting:
+            ser.read(ser.in_waiting)
+    except Exception as e:
+        print(f"[WARN] init_kmbox import: {e}")
+    try:
+        ser.write(b"km.buttons(1)\r\n")
+        ser.flush()
+        time.sleep(0.01)
+        if ser.in_waiting:
+            ser.read(ser.in_waiting)
+    except Exception as e:
+        print(f"[WARN] init_kmbox buttons: {e}")
+
 def connect_to_makcu():
     global makcu, is_connected
     ports = find_com_ports()
@@ -145,8 +164,7 @@ def connect_to_makcu():
                 try:
                     ser = serial.Serial(port_name, baud, timeout=0.1)
                     with makcu_lock:
-                        ser.write(b"km.buttons(1)\r")
-                        ser.flush()
+                        init_kmbox(ser)
                     ser.close()
                     time.sleep(0.1)
                     makcu = serial.Serial(port_name, baud, timeout=0.1)

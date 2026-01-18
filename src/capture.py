@@ -321,10 +321,12 @@ def list_capture_devices(max_devices=20):
         if cap_get_desc(idx, name_buf, 256, desc_buf, 256):
             try:
                 name = name_buf.value.decode("utf-8", "ignore").strip()
+                desc = desc_buf.value.decode("utf-8", "ignore").strip()
             except Exception:
                 name = ""
+                desc = ""
             if name:
-                devices.append(name)
+                devices.append((name, desc))
     return devices
 
 

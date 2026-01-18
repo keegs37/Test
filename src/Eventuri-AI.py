@@ -393,14 +393,15 @@ class EventuriGUI(ctk.CTk, GUISections, GUICallbacks):
                 h = int(self.capture_res_h_entry.get().strip())
                 w = max(0, min(7680, w))
                 h = max(0, min(4320, h))
-                name = self.capture_device_var.get().strip()
+                selection = self.capture_device_var.get().strip()
+                name = self.capture_device_map.get(selection, selection)
                 config.capture_card_index = 0
                 config.capture_card_width = w
                 config.capture_card_height = h
                 config.capture_card_device_name = name
                 self.capture_res_w_entry.delete(0, "end"); self.capture_res_w_entry.insert(0, str(w))
                 self.capture_res_h_entry.delete(0, "end"); self.capture_res_h_entry.insert(0, str(h))
-                self.capture_device_var.set(name)
+                self.capture_device_var.set(selection)
                 if hasattr(config, "save") and callable(config.save):
                     config.save()
             except Exception:
@@ -429,13 +430,21 @@ class EventuriGUI(ctk.CTk, GUISections, GUICallbacks):
 
     def _capture_device_menu_values(self):
         devices = list_capture_devices()
-        return devices if devices else ["(no capture devices found)"]
+        self.capture_device_map = {}
+        values = []
+        for name, desc in devices:
+            display = f"{name} ({desc})" if desc and desc != name else name
+            values.append(display)
+            self.capture_device_map[display] = name
+        return values if values else ["(no capture devices found)"]
 
     def _initial_capture_device_value(self):
         name = getattr(config, "capture_card_device_name", "")
         devices = self._capture_device_menu_values()
-        if name and name in devices:
-            return name
+        if name:
+            for display, actual in self.capture_device_map.items():
+                if actual == name:
+                    return display
         return devices[0] if devices else "(no capture devices found)"
 
     def _refresh_capture_devices(self):
@@ -449,13 +458,13 @@ class EventuriGUI(ctk.CTk, GUISections, GUICallbacks):
             selection = values[0]
             self.capture_device_var.set(selection)
         if not selection.startswith("("):
-            config.capture_card_device_name = selection
+            config.capture_card_device_name = self.capture_device_map.get(selection, selection)
             if hasattr(config, "save") and callable(config.save):
                 config.save()
 
     def _on_capture_device_change(self, value):
         if value and not value.startswith("("):
-            config.capture_card_device_name = value
+            config.capture_card_device_name = self.capture_device_map.get(value, value)
             if hasattr(config, "save") and callable(config.save):
                 config.save()
 
@@ -507,6 +516,8 @@ class EventuriGUI(ctk.CTk, GUISections, GUICallbacks):
             self.capture_device_menu.configure(state=state)
             self.capture_res_w_entry.configure(state=state)
             self.capture_res_h_entry.configure(state=state)
+            if is_capture:
+                self._refresh_capture_devices()
         except Exception:
             pass
 
@@ -1087,8 +1098,13 @@ class EventuriGUI(ctk.CTk, GUISections, GUICallbacks):
         try:
             self.capture_res_w_entry.delete(0, "end"); self.capture_res_w_entry.insert(0, str(getattr(config, "capture_card_width", 0)))
             self.capture_res_h_entry.delete(0, "end"); self.capture_res_h_entry.insert(0, str(getattr(config, "capture_card_height", 0)))
-            self.capture_device_var.set(str(getattr(config, "capture_card_device_name", self.capture_device_var.get())))
             self.capture_device_menu.configure(values=self._capture_device_menu_values())
+            device_name = str(getattr(config, "capture_card_device_name", ""))
+            if device_name:
+                for display, actual in self.capture_device_map.items():
+                    if actual == device_name:
+                        self.capture_device_var.set(display)
+                        break
         except Exception:
             pass
 
