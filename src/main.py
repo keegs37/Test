@@ -57,6 +57,56 @@ def smooth_movement_loop():
 def _now_ms():
     return time.perf_counter() * 1000.0
 
+def _get_aim_transform():
+    mode = config.capturer_mode.lower()
+    if mode == "mss":
+        region_left = (config.screen_width - config.region_size) // 2
+        region_top = (config.screen_height - config.region_size) // 2
+        crosshair_x = config.screen_width // 2
+        crosshair_y = config.screen_height // 2
+        scale_x = 1.0
+        scale_y = 1.0
+        return region_left, region_top, crosshair_x, crosshair_y, scale_x, scale_y
+
+    if mode == "capture":
+        cap_w = int(getattr(config, "capture_width", config.ndi_width))
+        cap_h = int(getattr(config, "capture_height", config.ndi_height))
+        game_w = int(getattr(config, "game_width", cap_w))
+        game_h = int(getattr(config, "game_height", cap_h))
+
+        range_x = int(getattr(config, "capture_range_x", 128))
+        range_y = int(getattr(config, "capture_range_y", 128))
+        if range_x < 128:
+            range_x = max(128, getattr(config, "region_size", 200))
+        if range_y < 128:
+            range_y = max(128, getattr(config, "region_size", 200))
+
+        offset_x = int(getattr(config, "capture_offset_x", 0))
+        offset_y = int(getattr(config, "capture_offset_y", 0))
+
+        center_x = cap_w // 2
+        center_y = cap_h // 2
+        left = center_x - range_x // 2 + offset_x
+        top = center_y - range_y // 2 + offset_y
+        left = max(0, min(left, cap_w))
+        top = max(0, min(top, cap_h))
+
+        scale_x = (game_w / cap_w) if cap_w else 1.0
+        scale_y = (game_h / cap_h) if cap_h else 1.0
+        region_left = int(left * scale_x)
+        region_top = int(top * scale_y)
+        crosshair_x = game_w // 2
+        crosshair_y = game_h // 2
+        return region_left, region_top, crosshair_x, crosshair_y, scale_x, scale_y
+
+    region_left = (config.main_pc_width - config.ndi_width) // 2
+    region_top = (config.main_pc_height - config.ndi_height) // 2
+    crosshair_x = config.main_pc_width // 2
+    crosshair_y = config.main_pc_height // 2
+    scale_x = (config.main_pc_width / config.ndi_width) if config.ndi_width else 1.0
+    scale_y = (config.main_pc_height / config.ndi_height) if config.ndi_height else 1.0
+    return region_left, region_top, crosshair_x, crosshair_y, scale_x, scale_y
+
 def capture_loop():
     """PRODUCER: This loop runs on a dedicated CPU thread."""
     camera, _ = get_camera()
@@ -114,16 +164,7 @@ def detection_and_aim_loop():
         except queue.Empty:
             print("[WARN] Frame queue is empty. Capture thread may have stalled.")
             continue
-        if config.capturer_mode.lower() == "mss":
-            region_left = (config.screen_width - config.region_size) // 2
-            region_top  = (config.screen_height - config.region_size) // 2
-            crosshair_x = config.screen_width // 2
-            crosshair_y = config.screen_height // 2
-        else:
-            region_left = (config.main_pc_width - config.ndi_width) // 2
-            region_top  = (config.main_pc_height - config.ndi_height) // 2
-            crosshair_x = config.main_pc_width // 2
-            crosshair_y = config.main_pc_height // 2
+        region_left, region_top, crosshair_x, crosshair_y, scale_x, scale_y = _get_aim_transform()
         if config.button_mask:
             Mouse.mask_manager_tick(selected_idx=config.selected_mouse_button, aimbot_running=is_aimbot_running())
             Mouse.mask_manager_tick(selected_idx=config.trigger_button, aimbot_running=is_aimbot_running())
@@ -243,130 +284,73 @@ def detection_and_aim_loop():
                         cv2.putText(debug_image, label, (x1, y1-10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
 
         # --- Target Selection and Aiming (Only when button is held) ---
+        def apply_aim(best_target):
+            target_screen_x = region_left + best_target['center_x'] * scale_x
+            target_screen_y = region_top + best_target['center_y'] * scale_y
+
+            dx = target_screen_x - crosshair_x
+            dy = target_screen_y - crosshair_y
+
+            # Apply im-game-sensitivity scaling
+            sens = config.in_game_sens
+            distance = 1.07437623 * math.pow(sens, -0.9936827126)
+            # Apply distance scaling
+            dx *= distance
+            dy *= distance
+
+            if config.mode == "normal":
+                # Apply x,y speeds scaling
+                dx *= config.normal_x_speed
+                dy *= config.normal_y_speed
+                makcu.move(dx, dy)
+                return
+            if config.mode == "bezier":
+                makcu.move_bezier(dx, dy, config.bezier_segments, config.bezier_ctrl_x, config.bezier_ctrl_y)
+                return
+            if config.mode == "silent":
+                makcu.move_bezier(dx, dy, config.silent_segments, config.silent_ctrl_x, config.silent_ctrl_y)
+                return
+            if config.mode != "smooth":
+                return
+
+            # Use smooth aiming with WindMouse algorithm
+            path = smooth_aimer.calculate_smooth_path(dx, dy, config)
+
+            # Add all movements to the smooth movement queue
+            movements_added = 0
+            for move_dx, move_dy, delay in path:
+                if not smooth_move_queue.full():
+                    smooth_move_queue.put((move_dx, move_dy, delay))
+                    movements_added += 1
+                    if movements_added <= 5:  # Only print first few to avoid spam
+                        print(f"[DEBUG] Added movement: ({move_dx}, {move_dy}) with delay {delay:.3f}")
+                else:
+                    # If queue is full, clear it and add this movement
+                    print("[DEBUG] Queue full, clearing and adding movement")
+                    try:
+                        while not smooth_move_queue.empty():
+                            smooth_move_queue.get_nowait()
+                    except queue.Empty:
+                        pass
+                    smooth_move_queue.put((move_dx, move_dy, delay))
+                    movements_added += 1
+                    break
+
+            print(f"[DEBUG] Added {movements_added} movements to queue")
+
+            # Fallback: if no smooth movements generated, use direct movement
+            if len(path) == 0:
+                print("[DEBUG] No smooth path generated, using direct movement")
+                makcu.move(dx, dy)
+
         button_held = is_button_pressed(config.selected_mouse_button)
         if all_targets and button_held:
             best_target = min(all_targets, key=lambda t: t['dist'])
-
-            scale_x = (config.main_pc_width / config.ndi_width) if config.ndi_width else 1.0
-            scale_y = (config.main_pc_height / config.ndi_height) if config.ndi_height else 1.0
-            target_screen_x = region_left + best_target['center_x'] * scale_x
-            target_screen_y = region_top + best_target['center_y'] * scale_y
-
-            dx = target_screen_x - crosshair_x
-            dy = target_screen_y - crosshair_y
-
-            # Apply im-game-sensitivity scaling
-            sens = config.in_game_sens
-            distance = 1.07437623 * math.pow(sens, -0.9936827126)
-            # Apply distance scaling
-            dx *= distance
-            dy *= distance
-
-
-           
-            if config.mode == "normal":
-                # Apply x,y speeds scaling
-                dx *= config.normal_x_speed
-                dy *= config.normal_y_speed
-                makcu.move(dx, dy)
-            elif config.mode == "bezier":
-                makcu.move_bezier(dx, dy, config.bezier_segments, config.bezier_ctrl_x, config.bezier_ctrl_y)
-            elif config.mode == "silent":
-                makcu.move_bezier(dx, dy, config.silent_segments, config.silent_ctrl_x, config.silent_ctrl_y)
-            elif config.mode == "smooth":
-                # Use smooth aiming with WindMouse algorithm
-                
-                path = smooth_aimer.calculate_smooth_path(dx, dy, config)
-
-                # Add all movements to the smooth movement queue
-                movements_added = 0
-                for move_dx, move_dy, delay in path:
-                    if not smooth_move_queue.full():
-                        smooth_move_queue.put((move_dx, move_dy, delay))
-                        movements_added += 1
-                        if movements_added <= 5:  # Only print first few to avoid spam
-                            print(f"[DEBUG] Added movement: ({move_dx}, {move_dy}) with delay {delay:.3f}")
-                    else:
-                        # If queue is full, clear it and add this movement
-                        print("[DEBUG] Queue full, clearing and adding movement")
-                        try:
-                            while not smooth_move_queue.empty():
-                                smooth_move_queue.get_nowait()
-                        except queue.Empty:
-                            pass
-                        smooth_move_queue.put((move_dx, move_dy, delay))
-                        movements_added += 1
-                        break
-
-                print(f"[DEBUG] Added {movements_added} movements to queue")
-
-                # Fallback: if no smooth movements generated, use direct movement
-                if len(path) == 0:
-                    print("[DEBUG] No smooth path generated, using direct movement")
-                    makcu.move(dx, dy)
+            apply_aim(best_target)
 
         elif all_targets and config.always_on_aim:
             best_target = min(all_targets, key=lambda t: t['dist'])
-
-            scale_x = (config.main_pc_width / config.ndi_width) if config.ndi_width else 1.0
-            scale_y = (config.main_pc_height / config.ndi_height) if config.ndi_height else 1.0
-            target_screen_x = region_left + best_target['center_x'] * scale_x
-            target_screen_y = region_top + best_target['center_y'] * scale_y
-
-            dx = target_screen_x - crosshair_x
-            dy = target_screen_y - crosshair_y
-
-            # Apply im-game-sensitivity scaling
-            sens = config.in_game_sens
-            distance = 1.07437623 * math.pow(sens, -0.9936827126)
-            # Apply distance scaling
-            dx *= distance
-            dy *= distance
-
-
-           
-            if config.mode == "normal":
-                # Apply x,y speeds scaling
-                dx *= config.normal_x_speed
-                dy *= config.normal_y_speed
-                makcu.move(dx, dy)
-            elif config.mode == "bezier":
-                makcu.move_bezier(dx, dy, config.bezier_segments, config.bezier_ctrl_x, config.bezier_ctrl_y)
-            elif config.mode == "silent":
-                makcu.move_bezier(dx, dy, config.silent_segments, config.silent_ctrl_x, config.silent_ctrl_y)
-            elif config.mode == "smooth":
-                # Use smooth aiming with WindMouse algorithm
-                
-                path = smooth_aimer.calculate_smooth_path(dx, dy, config)
-
-
-
-                # Add all movements to the smooth movement queue
-                movements_added = 0
-                for move_dx, move_dy, delay in path:
-                    if not smooth_move_queue.full():
-                        smooth_move_queue.put((move_dx, move_dy, delay))
-                        movements_added += 1
-                        if movements_added <= 5:  # Only print first few to avoid spam
-                            print(f"[DEBUG] Added movement: ({move_dx}, {move_dy}) with delay {delay:.3f}")
-                    else:
-                        # If queue is full, clear it and add this movement
-                        print("[DEBUG] Queue full, clearing and adding movement")
-                        try:
-                            while not smooth_move_queue.empty():
-                                smooth_move_queue.get_nowait()
-                        except queue.Empty:
-                            pass
-                        smooth_move_queue.put((move_dx, move_dy, delay))
-                        movements_added += 1
-                        break
-
-                print(f"[DEBUG] Added {movements_added} movements to queue")
-
-                # Fallback: if no smooth movements generated, use direct movement
-                if len(path) == 0:
-                    print("[DEBUG] No smooth path generated, using direct movement")
-                    makcu.move(dx, dy)
+            apply_aim(best_target)
         else:
             # Reset fatigue when not aiming
             smooth_aimer.reset_fatigue()
