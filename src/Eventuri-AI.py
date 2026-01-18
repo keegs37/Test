@@ -2,7 +2,8 @@ import os
 import customtkinter as ctk
 from tkinter import messagebox
 from config import config
-from mouse import Mouse,connect_to_makcu, test_move
+from mouse import Mouse, connect_to_makcu, start_listener, test_move
+from capture import list_capture_devices
 import main
 from main import (
     start_aimbot, stop_aimbot, is_aimbot_running,
@@ -281,14 +282,14 @@ class EventuriGUI(ctk.CTk, GUISections, GUICallbacks):
             .grid(row=1, column=0, sticky="w", padx=15)
         self.capture_mode_var = ctk.StringVar(value=config.capturer_mode.upper())
         self.capture_mode_menu = ctk.CTkOptionMenu(
-            frame, values=["MSS", "NDI", "DXGI"], variable=self.capture_mode_var,
+            frame, values=["MSS", "NDI", "DXGI", "CAPTURE"], variable=self.capture_mode_var,
             command=self.on_capture_mode_change, width=110
         )
         self.capture_mode_menu.grid(row=1, column=1, sticky="w", padx=(5, 15), pady=10)
 
         # --- NDI-only block (shown only when capture mode = NDI) ---
         self.ndi_block = ctk.CTkFrame(frame, fg_color="transparent")
-        # we'll grid/place this in _update_ndi_controls_state()
+        # we'll grid/place this in _update_capture_controls_state()
         # internal grid for the block
         self.ndi_block.grid_columnconfigure(1, weight=1)
 
@@ -344,6 +345,88 @@ class EventuriGUI(ctk.CTk, GUISections, GUICallbacks):
         self.main_res_w_entry.bind("<FocusOut>", _commit_main_res)
         self.main_res_h_entry.bind("<FocusOut>", _commit_main_res)
 
+        # --- Capture-card-only block ---
+        self.capture_block = ctk.CTkFrame(frame, fg_color="transparent")
+        self.capture_block.grid_columnconfigure(1, weight=1)
+
+        ctk.CTkLabel(self.capture_block, text="Capture Device:", font=("Segoe UI", 14), text_color="#ffffff")\
+            .grid(row=0, column=0, sticky="w", padx=15, pady=(0, 8))
+        self.capture_device_var = ctk.StringVar(value=self._initial_capture_device_value())
+        self.capture_device_menu = ctk.CTkOptionMenu(
+            self.capture_block,
+            values=self._capture_device_menu_values(),
+            variable=self.capture_device_var,
+            command=self._on_capture_device_change,
+            width=260,
+        )
+        self.capture_device_menu.grid(row=0, column=1, sticky="w", padx=(5, 15), pady=(0, 8))
+
+        ctk.CTkButton(
+            self.capture_block,
+            text="Refresh Devices",
+            command=self._refresh_capture_devices,
+            width=140,
+            fg_color="#333",
+            hover_color="#555",
+        ).grid(row=0, column=2, sticky="w", padx=(5, 15), pady=(0, 8))
+
+        ctk.CTkLabel(self.capture_block, text="Capture Resolution:", font=("Segoe UI", 14), text_color="#ffffff")\
+            .grid(row=1, column=0, sticky="w", padx=15)
+
+        cap_res_wrap = ctk.CTkFrame(self.capture_block, fg_color="transparent")
+        cap_res_wrap.grid(row=1, column=1, sticky="w", padx=(5, 15))
+
+        self.capture_res_w_entry = ctk.CTkEntry(cap_res_wrap, width=90, justify="center")
+        self.capture_res_w_entry.pack(side="left")
+        self.capture_res_w_entry.insert(0, str(getattr(config, "capture_width", 1920)))
+
+        ctk.CTkLabel(cap_res_wrap, text=" × ", font=("Segoe UI", 14), text_color="#ffffff")\
+            .pack(side="left", padx=6)
+
+        self.capture_res_h_entry = ctk.CTkEntry(cap_res_wrap, width=90, justify="center")
+        self.capture_res_h_entry.pack(side="left")
+        self.capture_res_h_entry.insert(0, str(getattr(config, "capture_height", 1080)))
+
+        ctk.CTkLabel(self.capture_block, text="Capture FPS:", font=("Segoe UI", 14), text_color="#ffffff")\
+            .grid(row=2, column=0, sticky="w", padx=15, pady=(8, 0))
+        self.capture_fps_entry = ctk.CTkEntry(self.capture_block, width=90, justify="center")
+        self.capture_fps_entry.grid(row=2, column=1, sticky="w", padx=(5, 15), pady=(8, 0))
+        self.capture_fps_entry.insert(0, str(getattr(config, "capture_fps", 240)))
+
+        def _commit_capture_settings(event=None):
+            try:
+                w = int(self.capture_res_w_entry.get().strip())
+                h = int(self.capture_res_h_entry.get().strip())
+                w = max(0, min(7680, w))
+                h = max(0, min(4320, h))
+                fps = float(self.capture_fps_entry.get().strip())
+                fps = max(1, min(300, fps))
+                selection = self.capture_device_var.get().strip()
+                device_index = self.capture_device_map.get(selection, -1)
+                if device_index >= 0:
+                    config.capture_device_index = device_index
+                config.capture_width = w
+                config.capture_height = h
+                config.capture_fps = fps
+                self.capture_res_w_entry.delete(0, "end"); self.capture_res_w_entry.insert(0, str(w))
+                self.capture_res_h_entry.delete(0, "end"); self.capture_res_h_entry.insert(0, str(h))
+                self.capture_fps_entry.delete(0, "end"); self.capture_fps_entry.insert(0, str(fps))
+                self.capture_device_var.set(selection)
+                if hasattr(config, "save") and callable(config.save):
+                    config.save()
+            except Exception:
+                self.capture_res_w_entry.delete(0, "end"); self.capture_res_w_entry.insert(0, str(getattr(config, "capture_width", 1920)))
+                self.capture_res_h_entry.delete(0, "end"); self.capture_res_h_entry.insert(0, str(getattr(config, "capture_height", 1080)))
+                self.capture_fps_entry.delete(0, "end"); self.capture_fps_entry.insert(0, str(getattr(config, "capture_fps", 240)))
+
+        self.capture_res_w_entry.bind("<Return>", _commit_capture_settings)
+        self.capture_res_h_entry.bind("<Return>", _commit_capture_settings)
+        self.capture_res_w_entry.bind("<FocusOut>", _commit_capture_settings)
+        self.capture_res_h_entry.bind("<FocusOut>", _commit_capture_settings)
+        self.capture_device_menu.bind("<FocusOut>", _commit_capture_settings)
+        self.capture_fps_entry.bind("<Return>", _commit_capture_settings)
+        self.capture_fps_entry.bind("<FocusOut>", _commit_capture_settings)
+
         # Toggles
         self.debug_checkbox = ctk.CTkCheckBox(
             frame, text="Debug Window", variable=self.debug_checkbox_var,
@@ -352,10 +435,57 @@ class EventuriGUI(ctk.CTk, GUISections, GUICallbacks):
         self.debug_checkbox.grid(row=4, column=0, sticky="w", padx=15, pady=(5, 15))
 
         # Initial enable/disable state
-        self._update_ndi_controls_state()
+        self._update_capture_controls_state()
 
         # Start polling for source list updates
         self.after(1000, self._poll_ndi_sources)
+
+    def _capture_device_menu_values(self):
+        devices = list_capture_devices()
+        self.capture_device_map = {}
+        values = []
+        for idx, name, desc in devices:
+            if idx >= 0:
+                display = f"{idx}: {name} ({desc})" if desc and desc != name else f"{idx}: {name}"
+                self.capture_device_map[display] = idx
+            else:
+                display = f"{name} ({desc})" if desc else name
+            values.append(display)
+        return values if values else ["(no capture devices found)"]
+
+    def _initial_capture_device_value(self):
+        index = int(getattr(config, "capture_device_index", 0))
+        devices = self._capture_device_menu_values()
+        if index >= 0:
+            for display, actual in self.capture_device_map.items():
+                if actual == index:
+                    return display
+        return devices[0] if devices else "(no capture devices found)"
+
+    def _refresh_capture_devices(self):
+        values = self._capture_device_menu_values()
+        try:
+            self.capture_device_menu.configure(values=values)
+        except Exception:
+            return
+        selection = self.capture_device_var.get()
+        if selection not in values:
+            selection = values[0]
+            self.capture_device_var.set(selection)
+        if not selection.startswith("("):
+            device_index = self.capture_device_map.get(selection, -1)
+            if device_index >= 0:
+                config.capture_device_index = device_index
+            if hasattr(config, "save") and callable(config.save):
+                config.save()
+
+    def _on_capture_device_change(self, value):
+        if value and not value.startswith("("):
+            device_index = self.capture_device_map.get(value, -1)
+            if device_index >= 0:
+                config.capture_device_index = device_index
+            if hasattr(config, "save") and callable(config.save):
+                config.save()
 
     def _ndi_menu_values(self):
         # Show something friendly when empty
@@ -369,8 +499,10 @@ class EventuriGUI(ctk.CTk, GUISections, GUICallbacks):
         # fallbacks
         return config.ndi_sources[0] if config.ndi_sources else "(no NDI sources found)"
 
-    def _update_ndi_controls_state(self):
-        is_ndi = (self.capture_mode_var.get().upper() == "NDI")
+    def _update_capture_controls_state(self):
+        mode = self.capture_mode_var.get().upper()
+        is_ndi = (mode == "NDI")
+        is_capture = (mode == "CAPTURE")
 
         # Show/hide the whole NDI block
         try:
@@ -378,6 +510,14 @@ class EventuriGUI(ctk.CTk, GUISections, GUICallbacks):
                 self.ndi_block.grid(row=2, column=0, columnspan=2, sticky="ew")
             else:
                 self.ndi_block.grid_remove()
+        except Exception:
+            pass
+
+        try:
+            if is_capture:
+                self.capture_block.grid(row=2, column=0, columnspan=2, sticky="ew")
+            else:
+                self.capture_block.grid_remove()
         except Exception:
             pass
 
@@ -391,7 +531,20 @@ class EventuriGUI(ctk.CTk, GUISections, GUICallbacks):
             pass
 
         try:
-            self.debug_checkbox.grid_configure(row=4 if is_ndi else 2)
+            state = "normal" if is_capture else "disabled"
+            self.capture_device_menu.configure(state=state)
+            self.capture_res_w_entry.configure(state=state)
+            self.capture_res_h_entry.configure(state=state)
+            if is_capture:
+                self._refresh_capture_devices()
+        except Exception:
+            pass
+
+        try:
+            if is_ndi or is_capture:
+                self.debug_checkbox.grid_configure(row=4)
+            else:
+                self.debug_checkbox.grid_configure(row=2)
         except Exception:
             pass
 
@@ -429,7 +582,7 @@ class EventuriGUI(ctk.CTk, GUISections, GUICallbacks):
                 config.save()
 
         # 3) Reflect enable/disable based on mode
-        self._update_ndi_controls_state()
+        self._update_capture_controls_state()
 
         # tick again
         self.after(1000, self._poll_ndi_sources)
@@ -867,6 +1020,7 @@ class EventuriGUI(ctk.CTk, GUISections, GUICallbacks):
         """Enhanced connection with visual feedback"""
         Mouse.cleanup()  # Ensure mouse is clean before connecting
         if connect_to_makcu():
+            start_listener()
             config.makcu_connected = True
             config.makcu_status_msg = "Connected"
             self.connection_status.set("Connected")
@@ -950,7 +1104,7 @@ class EventuriGUI(ctk.CTk, GUISections, GUICallbacks):
         except Exception:
             pass
 
-        self._update_ndi_controls_state()
+        self._update_capture_controls_state()
 
         # Main PC resolution entries
         try:
@@ -959,19 +1113,33 @@ class EventuriGUI(ctk.CTk, GUISections, GUICallbacks):
         except Exception:
             pass
 
+        # Capture card entries
+        try:
+            self.capture_res_w_entry.delete(0, "end"); self.capture_res_w_entry.insert(0, str(getattr(config, "capture_width", 1920)))
+            self.capture_res_h_entry.delete(0, "end"); self.capture_res_h_entry.insert(0, str(getattr(config, "capture_height", 1080)))
+            self.capture_fps_entry.delete(0, "end"); self.capture_fps_entry.insert(0, str(getattr(config, "capture_fps", 240)))
+            self.capture_device_menu.configure(values=self._capture_device_menu_values())
+            device_index = int(getattr(config, "capture_device_index", 0))
+            for display, actual in self.capture_device_map.items():
+                if actual == device_index:
+                    self.capture_device_var.set(display)
+                    break
+        except Exception:
+            pass
+
 
     def on_capture_mode_change(self, value: str):
-        m = {"MSS": "mss", "NDI": "ndi", "DXGI": "dxgi"}  # <- add this key
+        m = {"MSS": "mss", "NDI": "ndi", "DXGI": "dxgi", "CAPTURE": "capture"}
         internal = m.get((value or "").upper(), "mss")
         if config.capturer_mode != internal:
             config.capturer_mode = internal
             self.error_text.set(f"🔁 Capture method set to: {value}")
-            self._update_ndi_controls_state()
+            self._update_capture_controls_state()
             if is_aimbot_running():
                 stop_aimbot(); start_aimbot()
             config.save()
         else:
-            self._update_ndi_controls_state()
+            self._update_capture_controls_state()
 
     def on_ndi_source_change(self, value: str):
         if self.capture_mode_var.get().upper() != "NDI":
