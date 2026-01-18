@@ -4,6 +4,7 @@ import mss
 import cv2
 import dxcam
 from config import config
+import ctypes
 
 # NDI imports
 from cyndilib.wrapper.ndi_recv import RecvColorFormat, RecvBandwidth
@@ -305,6 +306,26 @@ class CaptureCardCamera:
             self.camera.release()
         except Exception:
             pass
+
+
+def list_capture_devices(max_devices=20):
+    devices = []
+    try:
+        cap_get_desc = ctypes.windll.avicap32.capGetDriverDescriptionA
+    except Exception:
+        return devices
+
+    for idx in range(max_devices):
+        name_buf = ctypes.create_string_buffer(256)
+        desc_buf = ctypes.create_string_buffer(256)
+        if cap_get_desc(idx, name_buf, 256, desc_buf, 256):
+            try:
+                name = name_buf.value.decode("utf-8", "ignore").strip()
+            except Exception:
+                name = ""
+            if name:
+                devices.append(name)
+    return devices
 
 
 
