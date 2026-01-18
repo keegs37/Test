@@ -10,6 +10,7 @@ from main import (
     reload_model, get_model_classes, get_model_size
 )
 import glob
+import threading
 from gui_sections import *
 from gui_callbacks import *
 from gui_constants import NEON, BG, neon_button
@@ -74,7 +75,7 @@ class EventuriGUI(ctk.CTk, GUISections, GUICallbacks):
         self.poll_fps()
 
         # Auto-connect on startup and start polling status
-        self.on_connect()
+        self.after(100, lambda: threading.Thread(target=self.on_connect, daemon=True).start())
         self.after(500, self._poll_connection_status)
 
         # Bind resize event
