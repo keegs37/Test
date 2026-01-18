@@ -4,6 +4,9 @@ import mss
 import cv2
 import dxcam
 from config import config
+import ctypes
+import subprocess
+import sys
 
 # NDI imports
 from cyndilib.wrapper.ndi_recv import RecvColorFormat, RecvBandwidth
@@ -267,6 +270,207 @@ class DXGICamera:
             pass
 
 
+class CaptureCardCamera:
+    """Capture Card camera for reading frames from a capture device."""
+
+    def __init__(self, config, region=None):
+        self.frame_width = int(getattr(config, "capture_width", 1920))
+        self.frame_height = int(getattr(config, "capture_height", 1080))
+        self.target_fps = float(getattr(config, "capture_fps", 240))
+        self.device_index = int(getattr(config, "capture_device_index", 0))
+        self.fourcc_pref = list(getattr(config, "capture_fourcc_preference", ["NV12", "YUY2", "MJPG"]))
+        self.config = config
+        self.cap = None
+        self.running = True
+
+        preferred_backends = [cv2.CAP_DSHOW, cv2.CAP_MSMF, cv2.CAP_ANY]
+        for backend in preferred_backends:
+            cap = cv2.VideoCapture(self.device_index, backend)
+            if not cap.isOpened():
+                cap.release()
+                continue
+            cap.set(cv2.CAP_PROP_FRAME_WIDTH, float(self.frame_width))
+            cap.set(cv2.CAP_PROP_FRAME_HEIGHT, float(self.frame_height))
+            cap.set(cv2.CAP_PROP_FPS, float(self.target_fps))
+
+            for fourcc in self.fourcc_pref:
+                try:
+                    fourcc_code = cv2.VideoWriter_fourcc(*fourcc)
+                    cap.set(cv2.CAP_PROP_FOURCC, fourcc_code)
+                    print(f"[CaptureCard] Set fourcc to {fourcc}")
+                    break
+                except Exception as e:
+                    print(f"[CaptureCard] Failed to set fourcc {fourcc}: {e}")
+            self.cap = cap
+            print(f"[CaptureCard] Successfully opened camera {self.device_index} with backend {backend}")
+            print(f"[CaptureCard] Resolution: {self.frame_width}x{self.frame_height}, FPS: {self.target_fps}")
+            break
+
+        if self.cap is None or not self.cap.isOpened():
+            raise RuntimeError(f"Failed to open capture card at device index {self.device_index}")
+
+    def get_latest_frame(self):
+        if not self.cap or not self.cap.isOpened():
+            return None
+        ret, frame = self.cap.read()
+        if not ret or frame is None:
+            return None
+
+        base_w = int(getattr(self.config, "capture_width", 1920))
+        base_h = int(getattr(self.config, "capture_height", 1080))
+        config.ndi_width = base_w
+        config.ndi_height = base_h
+        game_w = int(getattr(self.config, "game_width", base_w))
+        game_h = int(getattr(self.config, "game_height", base_h))
+        config.main_pc_width = game_w
+        config.main_pc_height = game_h
+
+        range_x = int(getattr(self.config, "capture_range_x", 128))
+        range_y = int(getattr(self.config, "capture_range_y", 128))
+        if range_x < 128:
+            range_x = max(128, getattr(self.config, "region_size", 200))
+        if range_y < 128:
+            range_y = max(128, getattr(self.config, "region_size", 200))
+
+        config.ndi_width = range_x
+        config.ndi_height = range_y
+
+        offset_x = int(getattr(self.config, "capture_offset_x", 0))
+        offset_y = int(getattr(self.config, "capture_offset_y", 0))
+
+        center_x = base_w // 2
+        center_y = base_h // 2
+
+        left = center_x - range_x // 2 + offset_x
+        top = center_y - range_y // 2 + offset_y
+        right = left + range_x
+        bottom = top + range_y
+
+        left = max(0, min(left, base_w))
+        top = max(0, min(top, base_h))
+        right = max(left, min(right, base_w))
+        bottom = max(top, min(bottom, base_h))
+
+        frame = frame[top:bottom, left:right]
+        return frame
+
+    def stop(self):
+        self.running = False
+        if self.cap:
+            self.cap.release()
+            self.cap = None
+
+
+def _get_pnp_camera_names():
+    if sys.platform != "win32":
+        return []
+    commands = [
+        ["powershell", "-NoProfile", "-Command", "Get-PnpDevice -Class Camera | Select-Object -ExpandProperty FriendlyName"],
+        ["powershell", "-NoProfile", "-Command", "Get-PnpDevice -Class Image | Select-Object -ExpandProperty FriendlyName"],
+    ]
+    for cmd in commands:
+        try:
+            output = subprocess.check_output(cmd, text=True, stderr=subprocess.DEVNULL)
+        except Exception:
+            continue
+        names = [line.strip() for line in output.splitlines() if line.strip()]
+        if names:
+            return names
+    return []
+
+def list_capture_devices(max_devices=20):
+    devices = []
+    try:
+        cap_get_desc = ctypes.windll.avicap32.capGetDriverDescriptionA
+    except Exception:
+        cap_get_desc = None
+
+    if cap_get_desc:
+        for idx in range(max_devices):
+            name_buf = ctypes.create_string_buffer(256)
+            desc_buf = ctypes.create_string_buffer(256)
+            if cap_get_desc(idx, name_buf, 256, desc_buf, 256):
+                try:
+                    name = name_buf.value.decode("utf-8", "ignore").strip()
+                    desc = desc_buf.value.decode("utf-8", "ignore").strip()
+                except Exception:
+                    name = ""
+                    desc = ""
+                if name:
+                    devices.append((idx, name, desc))
+
+    pnp_names = _get_pnp_camera_names()
+    for name in pnp_names:
+        devices.append((-1, name, "PnP"))
+
+    seen = set()
+    unique = []
+    for idx, name, desc in devices:
+        key = (idx, name, desc)
+        if key in seen:
+            continue
+        seen.add(key)
+        unique.append((idx, name, desc))
+    return unique
+
+def get_capture_card_region(config):
+    base_w = int(getattr(config, "capture_width", getattr(config, "screen_width", 1920)))
+    base_h = int(getattr(config, "capture_height", getattr(config, "screen_height", 1080)))
+
+    range_x = int(getattr(config, "capture_range_x", 0))
+    range_y = int(getattr(config, "capture_range_y", 0))
+    if range_x <= 0:
+        range_x = getattr(config, "region_size", 200)
+    if range_y <= 0:
+        range_y = getattr(config, "region_size", 200)
+
+    offset_x = int(getattr(config, "capture_offset_x", 0))
+    offset_y = int(getattr(config, "capture_offset_y", 0))
+
+    left = (base_w - range_x) // 2 + offset_x
+    top = (base_h - range_y) // 2 + offset_y
+    right = left + range_x
+    bottom = top + range_y
+
+    left = max(0, min(left, base_w))
+    top = max(0, min(top, base_h))
+    right = max(left, min(right, base_w))
+    bottom = max(top, min(bottom, base_h))
+
+    return (left, top, right, bottom)
+
+def validate_capture_card_config(config):
+    try:
+        device_index = int(getattr(config, "capture_device_index", 0))
+        if device_index < 0 or device_index > 10:
+            return False, f"Device index {device_index} is out of valid range (0-10)"
+
+        width = int(getattr(config, "capture_width", 1920))
+        height = int(getattr(config, "capture_height", 1080))
+        if width < 320 or width > 7680:
+            return False, f"Capture width {width} is out of valid range (320-7680)"
+        if height < 240 or height > 4320:
+            return False, f"Capture height {height} is out of valid range (240-4320)"
+
+        fps = float(getattr(config, "capture_fps", 240))
+        if fps < 1 or fps > 300:
+            return False, f"Capture FPS {fps} is out of valid range (1-300)"
+
+        fourcc_list = getattr(config, "capture_fourcc_preference", ["NV12", "YUY2", "MJPG"])
+        if not isinstance(fourcc_list, list) or len(fourcc_list) == 0:
+            return False, "FourCC preference must be a non-empty list"
+
+        return True, None
+    except Exception as e:
+        return False, f"Configuration validation error: {str(e)}"
+
+def create_capture_card_camera(config, region=None):
+    is_valid, error_msg = validate_capture_card_config(config)
+    if not is_valid:
+        raise ValueError(f"Invalid capture card configuration: {error_msg}")
+    return CaptureCardCamera(config, region)
+
+
 
 
 def get_camera():
@@ -282,5 +486,8 @@ def get_camera():
         region = get_region()
         cam = DXGICamera(region)
         return cam, region
+    elif config.capturer_mode.lower() == "capture":
+        cam = create_capture_card_camera(config)
+        return cam, None
     else:
         raise ValueError(f"Unknown capturer_mode: {config.capturer_mode}")

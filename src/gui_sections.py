@@ -31,6 +31,52 @@ class GUISections:
         self.debug_checkbox.pack(side="left", padx=8)
         self.input_check_checkbox = ctk.CTkCheckBox(makcu_frame, text="Show Input Check", variable=self.input_check_var, onvalue=True, offvalue=False, text_color="#fff", command=self.on_input_check_toggle)
         self.input_check_checkbox.pack(side="left", padx=8)
+
+        # --- kmNet connection settings ---
+        kmnet_frame = ctk.CTkFrame(self, fg_color=BG)
+        kmnet_frame.pack(fill="x", padx=10, pady=(0, 8))
+        kmnet_frame.grid_columnconfigure(1, weight=1)
+        kmnet_frame.grid_columnconfigure(3, weight=1)
+
+        ctk.CTkLabel(kmnet_frame, text="kmNet IP:", text_color="#fff").grid(row=0, column=0, sticky="w", padx=6, pady=(4, 2))
+        self.kmnet_ip_entry = ctk.CTkEntry(kmnet_frame, width=140)
+        self.kmnet_ip_entry.grid(row=0, column=1, sticky="w", padx=(2, 12), pady=(4, 2))
+        self.kmnet_ip_entry.insert(0, str(getattr(config, "kmnet_ip", "")))
+
+        ctk.CTkLabel(kmnet_frame, text="kmNet Port:", text_color="#fff").grid(row=0, column=2, sticky="w", padx=6, pady=(4, 2))
+        self.kmnet_port_entry = ctk.CTkEntry(kmnet_frame, width=90, justify="center")
+        self.kmnet_port_entry.grid(row=0, column=3, sticky="w", padx=(2, 12), pady=(4, 2))
+        self.kmnet_port_entry.insert(0, str(getattr(config, "kmnet_port", "")))
+
+        ctk.CTkLabel(kmnet_frame, text="kmNet MAC:", text_color="#fff").grid(row=1, column=0, sticky="w", padx=6, pady=(2, 4))
+        self.kmnet_mac_entry = ctk.CTkEntry(kmnet_frame, width=140)
+        self.kmnet_mac_entry.grid(row=1, column=1, sticky="w", padx=(2, 12), pady=(2, 4))
+        self.kmnet_mac_entry.insert(0, str(getattr(config, "kmnet_mac", "")))
+
+        ctk.CTkLabel(kmnet_frame, text="Monitor Port:", text_color="#fff").grid(row=1, column=2, sticky="w", padx=6, pady=(2, 4))
+        self.kmnet_monitor_entry = ctk.CTkEntry(kmnet_frame, width=90, justify="center")
+        self.kmnet_monitor_entry.grid(row=1, column=3, sticky="w", padx=(2, 12), pady=(2, 4))
+        self.kmnet_monitor_entry.insert(0, str(getattr(config, "kmnet_monitor_port", 10000)))
+
+        def _commit_kmnet(event=None):
+            config.kmnet_ip = self.kmnet_ip_entry.get().strip()
+            config.kmnet_port = self.kmnet_port_entry.get().strip()
+            config.kmnet_mac = self.kmnet_mac_entry.get().strip()
+            try:
+                config.kmnet_monitor_port = int(self.kmnet_monitor_entry.get().strip())
+            except Exception:
+                config.kmnet_monitor_port = getattr(config, "kmnet_monitor_port", 10000)
+            if hasattr(config, "save") and callable(config.save):
+                config.save()
+
+        for entry in (
+            self.kmnet_ip_entry,
+            self.kmnet_port_entry,
+            self.kmnet_mac_entry,
+            self.kmnet_monitor_entry,
+        ):
+            entry.bind("<Return>", _commit_kmnet)
+            entry.bind("<FocusOut>", _commit_kmnet)
         
         # --- DETECTION SETTINGS (Enhanced) ---
         detection_frame = ctk.CTkFrame(self, fg_color=BG)
