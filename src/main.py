@@ -247,8 +247,10 @@ def detection_and_aim_loop():
         if all_targets and button_held:
             best_target = min(all_targets, key=lambda t: t['dist'])
 
-            target_screen_x = region_left + best_target['center_x']
-            target_screen_y = region_top + best_target['center_y']
+            scale_x = (config.main_pc_width / config.ndi_width) if config.ndi_width else 1.0
+            scale_y = (config.main_pc_height / config.ndi_height) if config.ndi_height else 1.0
+            target_screen_x = region_left + best_target['center_x'] * scale_x
+            target_screen_y = region_top + best_target['center_y'] * scale_y
 
             dx = target_screen_x - crosshair_x
             dy = target_screen_y - crosshair_y
@@ -306,8 +308,10 @@ def detection_and_aim_loop():
         elif all_targets and config.always_on_aim:
             best_target = min(all_targets, key=lambda t: t['dist'])
 
-            target_screen_x = region_left + best_target['center_x']
-            target_screen_y = region_top + best_target['center_y']
+            scale_x = (config.main_pc_width / config.ndi_width) if config.ndi_width else 1.0
+            scale_y = (config.main_pc_height / config.ndi_height) if config.ndi_height else 1.0
+            target_screen_x = region_left + best_target['center_x'] * scale_x
+            target_screen_y = region_top + best_target['center_y'] * scale_y
 
             dx = target_screen_x - crosshair_x
             dy = target_screen_y - crosshair_y
