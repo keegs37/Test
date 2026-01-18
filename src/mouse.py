@@ -1,5 +1,41 @@
 import threading
 import time
+import importlib
+import inspect
+
+try:
+    from makcu import create_controller, MouseButton
+except Exception:  # makcu must be installed for mouse support
+    create_controller = None
+    MouseButton = None
+
+from config import config
+
+try:
+    import kmNet
+except Exception:
+    kmNet = None
+
+from config import config
+
+try:
+    import kmNet
+except Exception:
+    kmNet = None
+
+from config import config
+
+try:
+    import kmNet
+except Exception:
+    kmNet = None
+
+from config import config
+
+try:
+    import kmNet
+except Exception:
+    kmNet = None
 
 from config import config
 
@@ -71,6 +107,8 @@ def listen_makcu():
     with button_states_lock:
         for i in range(5):
             button_states[i] = False
+
+    callback_enabled = _setup_button_monitoring()
 
     while is_connected:
         try:
