@@ -56,6 +56,7 @@ class EventuriGUI(ctk.CTk, GUISections, GUICallbacks):
         self.model_size = ctk.StringVar(value="")
         self.aim_humanize_var = ctk.BooleanVar(value=bool(config.aim_humanization))
         self.debug_checkbox_var = ctk.BooleanVar(value=False)
+        self.calibration_overlay_var = ctk.BooleanVar(value=bool(getattr(config, "show_calibration_overlay", False)))
         self.input_check_var = ctk.BooleanVar(value=False)
         self.button_mask_var = ctk.BooleanVar(value=bool(getattr(config, "button_mask", False)))
         self._building = True
@@ -459,6 +460,23 @@ class EventuriGUI(ctk.CTk, GUISections, GUICallbacks):
         self.game_res_h_entry.pack(side="left")
         self.game_res_h_entry.insert(0, str(getattr(config, "game_height", 1080)))
 
+        ctk.CTkLabel(self.capture_block, text="Capture Offset:", font=("Segoe UI", 14), text_color="#ffffff")\
+            .grid(row=4, column=0, sticky="w", padx=15, pady=(8, 0))
+        offset_wrap = ctk.CTkFrame(self.capture_block, fg_color="transparent")
+        offset_wrap.grid(row=4, column=1, sticky="w", padx=(5, 15), pady=(8, 0))
+
+        ctk.CTkLabel(offset_wrap, text="X", font=("Segoe UI", 12), text_color="#ffffff")\
+            .pack(side="left", padx=(0, 6))
+        self.capture_offset_x_entry = ctk.CTkEntry(offset_wrap, width=80, justify="center")
+        self.capture_offset_x_entry.pack(side="left", padx=(0, 12))
+        self.capture_offset_x_entry.insert(0, str(getattr(config, "capture_offset_x", 0)))
+
+        ctk.CTkLabel(offset_wrap, text="Y", font=("Segoe UI", 12), text_color="#ffffff")\
+            .pack(side="left", padx=(0, 6))
+        self.capture_offset_y_entry = ctk.CTkEntry(offset_wrap, width=80, justify="center")
+        self.capture_offset_y_entry.pack(side="left")
+        self.capture_offset_y_entry.insert(0, str(getattr(config, "capture_offset_y", 0)))
+
         def _commit_capture_settings(event=None):
             try:
                 w = int(self.capture_res_w_entry.get().strip())
@@ -483,11 +501,22 @@ class EventuriGUI(ctk.CTk, GUISections, GUICallbacks):
                     config.game_height = game_h
                 except Exception:
                     pass
+                try:
+                    offset_x = int(self.capture_offset_x_entry.get().strip())
+                    offset_y = int(self.capture_offset_y_entry.get().strip())
+                    offset_x = max(-w, min(w, offset_x))
+                    offset_y = max(-h, min(h, offset_y))
+                    config.capture_offset_x = offset_x
+                    config.capture_offset_y = offset_y
+                except Exception:
+                    pass
                 self.capture_res_w_entry.delete(0, "end"); self.capture_res_w_entry.insert(0, str(w))
                 self.capture_res_h_entry.delete(0, "end"); self.capture_res_h_entry.insert(0, str(h))
                 self.capture_fps_entry.delete(0, "end"); self.capture_fps_entry.insert(0, str(fps))
                 self.game_res_w_entry.delete(0, "end"); self.game_res_w_entry.insert(0, str(getattr(config, "game_width", 1920)))
                 self.game_res_h_entry.delete(0, "end"); self.game_res_h_entry.insert(0, str(getattr(config, "game_height", 1080)))
+                self.capture_offset_x_entry.delete(0, "end"); self.capture_offset_x_entry.insert(0, str(getattr(config, "capture_offset_x", 0)))
+                self.capture_offset_y_entry.delete(0, "end"); self.capture_offset_y_entry.insert(0, str(getattr(config, "capture_offset_y", 0)))
                 self.capture_device_var.set(selection)
                 if hasattr(config, "save") and callable(config.save):
                     config.save()
@@ -497,6 +526,8 @@ class EventuriGUI(ctk.CTk, GUISections, GUICallbacks):
                 self.capture_fps_entry.delete(0, "end"); self.capture_fps_entry.insert(0, str(getattr(config, "capture_fps", 240)))
                 self.game_res_w_entry.delete(0, "end"); self.game_res_w_entry.insert(0, str(getattr(config, "game_width", 1920)))
                 self.game_res_h_entry.delete(0, "end"); self.game_res_h_entry.insert(0, str(getattr(config, "game_height", 1080)))
+                self.capture_offset_x_entry.delete(0, "end"); self.capture_offset_x_entry.insert(0, str(getattr(config, "capture_offset_x", 0)))
+                self.capture_offset_y_entry.delete(0, "end"); self.capture_offset_y_entry.insert(0, str(getattr(config, "capture_offset_y", 0)))
 
         self.capture_res_w_entry.bind("<Return>", _commit_capture_settings)
         self.capture_res_h_entry.bind("<Return>", _commit_capture_settings)
@@ -509,6 +540,10 @@ class EventuriGUI(ctk.CTk, GUISections, GUICallbacks):
         self.game_res_h_entry.bind("<Return>", _commit_capture_settings)
         self.game_res_w_entry.bind("<FocusOut>", _commit_capture_settings)
         self.game_res_h_entry.bind("<FocusOut>", _commit_capture_settings)
+        self.capture_offset_x_entry.bind("<Return>", _commit_capture_settings)
+        self.capture_offset_y_entry.bind("<Return>", _commit_capture_settings)
+        self.capture_offset_x_entry.bind("<FocusOut>", _commit_capture_settings)
+        self.capture_offset_y_entry.bind("<FocusOut>", _commit_capture_settings)
 
         # Toggles
         self.debug_checkbox = ctk.CTkCheckBox(
@@ -516,6 +551,12 @@ class EventuriGUI(ctk.CTk, GUISections, GUICallbacks):
             command=self.on_debug_toggle, text_color="#fff"
         )
         self.debug_checkbox.grid(row=4, column=0, sticky="w", padx=15, pady=(5, 15))
+
+        self.calibration_checkbox = ctk.CTkCheckBox(
+            frame, text="Calibration Overlay", variable=self.calibration_overlay_var,
+            command=self.on_calibration_overlay_toggle, text_color="#fff"
+        )
+        self.calibration_checkbox.grid(row=5, column=0, sticky="w", padx=15, pady=(0, 15))
 
         # Initial enable/disable state
         self._update_capture_controls_state()
@@ -1159,6 +1200,7 @@ class EventuriGUI(ctk.CTk, GUISections, GUICallbacks):
         self.load_class_list()
         self.update_dynamic_frame()
         self.debug_checkbox_var.set(config.show_debug_window)
+        self.calibration_overlay_var.set(bool(getattr(config, "show_calibration_overlay", False)))
         self.input_check_var.set(False)
         self.button_mask_var.set(bool(getattr(config, "button_mask", False)))
         self.capture_mode_var.set(config.capturer_mode.upper())
@@ -1212,6 +1254,8 @@ class EventuriGUI(ctk.CTk, GUISections, GUICallbacks):
             self.capture_fps_entry.delete(0, "end"); self.capture_fps_entry.insert(0, str(getattr(config, "capture_fps", 240)))
             self.game_res_w_entry.delete(0, "end"); self.game_res_w_entry.insert(0, str(getattr(config, "game_width", 1920)))
             self.game_res_h_entry.delete(0, "end"); self.game_res_h_entry.insert(0, str(getattr(config, "game_height", 1080)))
+            self.capture_offset_x_entry.delete(0, "end"); self.capture_offset_x_entry.insert(0, str(getattr(config, "capture_offset_x", 0)))
+            self.capture_offset_y_entry.delete(0, "end"); self.capture_offset_y_entry.insert(0, str(getattr(config, "capture_offset_y", 0)))
             self.capture_device_menu.configure(values=self._capture_device_menu_values())
             device_index = int(getattr(config, "capture_device_index", 0))
             for display, actual in self.capture_device_map.items():
@@ -1712,6 +1756,14 @@ class EventuriGUI(ctk.CTk, GUISections, GUICallbacks):
                 cv2.destroyWindow("AI Debug")
             except Exception:
                 pass
+
+    def on_calibration_overlay_toggle(self):
+        config.show_calibration_overlay = self.calibration_overlay_var.get()
+        try:
+            if hasattr(config, "save") and callable(config.save):
+                config.save()
+        except Exception as e:
+            print(f"[WARN] Failed to save config.show_calibration_overlay: {e}")
 
     def on_input_check_toggle(self):
         if self.input_check_var.get():

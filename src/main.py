@@ -433,6 +433,36 @@ def detection_and_aim_loop():
 
             cv2.drawMarker(debug_image, center, (255, 255, 255), cv2.MARKER_CROSS, 20, 2)
 
+            if config.capturer_mode.lower() == "capture" and getattr(config, "show_calibration_overlay", False):
+                frame_h, frame_w = debug_image.shape[:2]
+                offset_x = int(getattr(config, "capture_offset_x", 0))
+                offset_y = int(getattr(config, "capture_offset_y", 0))
+
+                offset_center = (center[0] + offset_x, center[1] + offset_y)
+                cv2.line(debug_image, center, offset_center, (0, 255, 255), 1)
+                cv2.drawMarker(debug_image, offset_center, (0, 255, 255), cv2.MARKER_TILTED_CROSS, 20, 2)
+
+                range_x = int(getattr(config, "capture_range_x", 128))
+                range_y = int(getattr(config, "capture_range_y", 128))
+                if range_x < 128:
+                    range_x = max(128, getattr(config, "region_size", 200))
+                if range_y < 128:
+                    range_y = max(128, getattr(config, "region_size", 200))
+
+                left = offset_center[0] - range_x // 2
+                top = offset_center[1] - range_y // 2
+                right = left + range_x
+                bottom = top + range_y
+
+                left = max(0, min(left, frame_w - 1))
+                top = max(0, min(top, frame_h - 1))
+                right = max(0, min(right, frame_w - 1))
+                bottom = max(0, min(bottom, frame_h - 1))
+
+                cv2.rectangle(debug_image, (left, top), (right, bottom), (0, 255, 255), 1)
+                overlay_text = f"Offset X/Y: {offset_x}, {offset_y}"
+                cv2.putText(debug_image, overlay_text, (10, 180), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 255), 2)
+
             # Show window in center of screen
             win_name = "AI Debug"
             cv2.imshow(win_name, debug_image)
