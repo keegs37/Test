@@ -37,8 +37,11 @@ def smooth_movement_loop():
             move_data = smooth_move_queue.get(timeout=0.1)
             dx, dy, delay = move_data
 
-
             # Execute the movement
+            if makcu is None:
+                print("[WARN] Smooth movement skipped: MAKCU device not initialized")
+                time.sleep(0.05)
+                continue
             makcu.move(dx, dy)
 
             # Wait for the specified delay
@@ -161,6 +164,10 @@ def detection_and_aim_loop():
     """CONSUMER: This loop runs on the main aimbot thread, utilizing the GPU."""
     global _aimbot_running, fps, makcu
     model, class_names = load_model(config.model_path)
+    if model is None:
+        print(f"[ERROR] Model failed to load: {config.model_load_error}")
+        _aimbot_running = False
+        return
     # makcu is already initialized in start_aimbot
 
 
@@ -317,12 +324,21 @@ def detection_and_aim_loop():
                 # Apply x,y speeds scaling
                 dx *= config.normal_x_speed
                 dy *= config.normal_y_speed
+                if makcu is None:
+                    print("[WARN] Aim skipped: MAKCU device not initialized")
+                    return
                 makcu.move(dx, dy)
                 return
             if config.mode == "bezier":
+                if makcu is None:
+                    print("[WARN] Aim skipped: MAKCU device not initialized")
+                    return
                 makcu.move_bezier(dx, dy, config.bezier_segments, config.bezier_ctrl_x, config.bezier_ctrl_y)
                 return
             if config.mode == "silent":
+                if makcu is None:
+                    print("[WARN] Aim skipped: MAKCU device not initialized")
+                    return
                 makcu.move_bezier(dx, dy, config.silent_segments, config.silent_ctrl_x, config.silent_ctrl_y)
                 return
             if config.mode != "smooth":
@@ -356,6 +372,9 @@ def detection_and_aim_loop():
             # Fallback: if no smooth movements generated, use direct movement
             if len(path) == 0:
                 print("[DEBUG] No smooth path generated, using direct movement")
+                if makcu is None:
+                    print("[WARN] Aim skipped: MAKCU device not initialized")
+                    return
                 makcu.move(dx, dy)
 
         button_held = is_button_pressed(config.selected_mouse_button)
@@ -402,7 +421,10 @@ def detection_and_aim_loop():
                         if linger_ok and cooldown_ok:
                             try:
                                 # Single click via MAKCU
-                                makcu.click()
+                                if makcu is None:
+                                    print("[WARN] Trigger click skipped: MAKCU device not initialized")
+                                else:
+                                    makcu.click()
                             except Exception as e:
                                 print(f"[WARN] Trigger click failed: {e}")
                             _last_trigger_time_ms = now
@@ -518,7 +540,9 @@ def start_aimbot():
             Mouse.cleanup()
             makcu=Mouse()
     except Exception as e:
-        print(f"[ERROR] Failed to cleanup Mouse instance: {e}")
+        print(f"[ERROR] Failed to initialize Mouse instance: {e}")
+        _aimbot_running = False
+        return
 
     _aimbot_running = True
     # Start capture thread
