@@ -499,6 +499,11 @@ def detection_and_aim_loop():
             fps = frame_count / elapsed
             start_time = time.perf_counter()
             frame_count = 0
+    if config.show_debug_window:
+        try:
+            cv2.destroyWindow("AI Debug")
+        except Exception:
+            pass
 
 def start_aimbot():
     global _aimbot_running, _aimbot_thread, _capture_thread, _smooth_thread, makcu
@@ -550,11 +555,6 @@ def stop_aimbot():
     except queue.Empty:
         pass
 
-    if config.show_debug_window:
-        try:
-            cv2.destroyAllWindows()
-        except Exception:
-            pass  # Ignore errors if window was already closed
     print("[INFO] Aimbot stopped.")
 
 def is_aimbot_running():
