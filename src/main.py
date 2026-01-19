@@ -57,6 +57,17 @@ def smooth_movement_loop():
 def _now_ms():
     return time.perf_counter() * 1000.0
 
+def _resolve_output_resolution():
+    candidates = [
+        (getattr(config, "main_pc_width", 0), getattr(config, "main_pc_height", 0)),
+        (getattr(config, "screen_width", 0), getattr(config, "screen_height", 0)),
+        (getattr(config, "game_width", 0), getattr(config, "game_height", 0)),
+    ]
+    for width, height in candidates:
+        if width and height and width > 0 and height > 0:
+            return int(width), int(height)
+    return 1920, 1080
+
 def _get_aim_transform():
     mode = config.capturer_mode.lower()
     if mode == "mss":
@@ -71,8 +82,7 @@ def _get_aim_transform():
     if mode == "capture":
         cap_w = int(getattr(config, "capture_width", config.ndi_width))
         cap_h = int(getattr(config, "capture_height", config.ndi_height))
-        game_w = int(getattr(config, "game_width", cap_w))
-        game_h = int(getattr(config, "game_height", cap_h))
+        output_w, output_h = _resolve_output_resolution()
 
         range_x = int(getattr(config, "capture_range_x", 128))
         range_y = int(getattr(config, "capture_range_y", 128))
@@ -91,12 +101,12 @@ def _get_aim_transform():
         left = max(0, min(left, cap_w))
         top = max(0, min(top, cap_h))
 
-        scale_x = (game_w / cap_w) if cap_w else 1.0
-        scale_y = (game_h / cap_h) if cap_h else 1.0
+        scale_x = (output_w / cap_w) if cap_w else 1.0
+        scale_y = (output_h / cap_h) if cap_h else 1.0
         region_left = int(left * scale_x)
         region_top = int(top * scale_y)
-        crosshair_x = game_w // 2
-        crosshair_y = game_h // 2
+        crosshair_x = output_w // 2
+        crosshair_y = output_h // 2
         return region_left, region_top, crosshair_x, crosshair_y, scale_x, scale_y
 
     region_left = (config.main_pc_width - config.ndi_width) // 2
@@ -177,7 +187,11 @@ def detection_and_aim_loop():
         debug_image = image.copy() if config.show_debug_window else None
         detected_classes = set()  # Track what classes are being detected
 
-        results = perform_detection(model, image)
+        try:
+            results = perform_detection(model, image)
+        except Exception as e:
+            print(f"[ERROR] Detection failed: {e}")
+            continue
 
         # --- Target Processing Logic ---
         if results:
