@@ -203,7 +203,7 @@ def detection_and_aim_loop():
                         print("[WARN] Skipping box with NaN coords:", coords)
                         continue
 
-                    x1, y1, x2, y2 = [int(c) for c in coords]
+                    x1, y1, x2, y2 = coords
                     conf = float(box.conf[0].item())
                     cls = int(box.cls[0].item())
                     class_name = class_names.get(cls, f"class_{cls}")
@@ -253,12 +253,12 @@ def detection_and_aim_loop():
                             print(f"[DEBUG] Partial match for head: '{class_name}' contains '{head_label}'")
 
                     if is_target:
-                        center_x = (x1 + x2) / 2
-                        center_y = (y1 + y2) / 2
+                        center_x = (x1 + x2) / 2.0
+                        center_y = (y1 + y2) / 2.0
 
                         # Adjust for headshot
                         if target_type == "player":
-                            center_x = (x1 + x2) / 2
+                            center_x = (x1 + x2) / 2.0
                             center_y = y1 + config.player_y_offset
 
                         # Calculate distance from crosshair
@@ -288,14 +288,15 @@ def detection_and_aim_loop():
                             color = (0, 255, 255)
                             thickness = 1
 
-                        cv2.rectangle(debug_image, (x1, y1), (x2, y2), color, thickness)
+                        x1_i, y1_i, x2_i, y2_i = map(int, (x1, y1, x2, y2))
+                        cv2.rectangle(debug_image, (x1_i, y1_i), (x2_i, y2_i), color, thickness)
 
                         # Label with class name and confidence
                         label = f"{class_name} {conf:.2f}"
                         if is_target:
                             label += f" [{target_type.upper()}]"
 
-                        cv2.putText(debug_image, label, (x1, y1-10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
+                        cv2.putText(debug_image, label, (x1_i, y1_i - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
 
         # --- Target Selection and Aiming (Only when button is held) ---
         def apply_aim(best_target):
