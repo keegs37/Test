@@ -21,6 +21,10 @@ def get_site_packages():
 # If you want to force the path, uncomment the line below:
 # site_packages = r"C:\Eventuri Ai\Final\tt\venv\Lib\site-packages"
 site_packages = get_site_packages()
+accel_mode = os.getenv("EVENTURI_ACCEL", "directml").strip().lower()
+if accel_mode != "directml":
+    print(f"[*] Skipping DirectML patching for accel mode: {accel_mode}")
+    sys.exit(0)
 ultralytics_dir = os.path.join(site_packages, "ultralytics")
 print(f"[*] Using ultralytics path: {ultralytics_dir}")
 
