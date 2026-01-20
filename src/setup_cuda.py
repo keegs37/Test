@@ -38,7 +38,7 @@ else:
     # Step 2: Install remaining packages
     packages = [
         "customtkinter", "opencv-python", "pyserial", "mss", "ultralytics", "makcu", "macku",
-        "tensorrt==10.11.0.33", "onnx", "onnxruntime-directml", "cyndilib", "dxcam"
+        "tensorrt==10.11.0.33", "onnx", "onnxruntime-gpu", "cyndilib", "dxcam"
     ]
     print(f"[*] {REQUIREMENTS} not found. Installing default packages: {packages}")
     subprocess.check_call([venv_python, "-m", "pip", "install"] + packages)
@@ -47,7 +47,9 @@ else:
 patch_script = os.path.join(os.path.dirname(__file__), "patch.py")
 if os.path.exists(patch_script):
     print(f"[*] Running patch.py...")
-    subprocess.check_call([venv_python, patch_script])
+    env = os.environ.copy()
+    env["EVENTURI_ACCEL"] = "cuda"
+    subprocess.check_call([venv_python, patch_script], env=env)
 else:
     print("[!] patch.py not found! Skipping patch step.")
 
