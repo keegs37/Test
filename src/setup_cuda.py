@@ -37,11 +37,18 @@ else:
     ])
     # Step 2: Install remaining packages
     packages = [
-        "customtkinter", "opencv-python", "pyserial", "mss", "ultralytics", "makcu", "macku",
+        "customtkinter", "opencv-python", "pyserial", "mss", "ultralytics",
         "tensorrt==10.11.0.33", "onnx", "onnxruntime-gpu", "cyndilib", "dxcam"
     ]
+    optional_packages = ["makcu", "macku"]
     print(f"[*] {REQUIREMENTS} not found. Installing default packages: {packages}")
     subprocess.check_call([venv_python, "-m", "pip", "install"] + packages)
+    if optional_packages:
+        print(f"[*] Installing optional packages: {optional_packages}")
+        for package in optional_packages:
+            result = subprocess.run([venv_python, "-m", "pip", "install", package], check=False)
+            if result.returncode != 0:
+                print(f"[WARN] Optional package '{package}' failed to install. Skipping.")
 
 # 5. Run patch.py using the venv's Python
 patch_script = os.path.join(os.path.dirname(__file__), "patch.py")
