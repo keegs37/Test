@@ -21,7 +21,7 @@ ctk.set_appearance_mode("dark")
 class EventuriGUI(ctk.CTk, GUISections, GUICallbacks):
     def __init__(self):
         super().__init__()
-        self.title("EVENTURI-AI for MAKCU")
+        self.title("EVENTURI-AI")
         
         # Get screen dimensions for responsive design
         screen_width = self.winfo_screenwidth()
@@ -76,7 +76,7 @@ class EventuriGUI(ctk.CTk, GUISections, GUICallbacks):
         self.poll_fps()
 
         # Auto-connect on startup and start polling status
-        # Defer connection until the user clicks Connect to MAKCU.
+        # Defer connection until the user clicks Connect.
         self.after(500, self._poll_connection_status)
 
         # Bind resize event
@@ -146,7 +146,7 @@ class EventuriGUI(ctk.CTk, GUISections, GUICallbacks):
         conn_text_frame.grid(row=0, column=1)
         ctk.CTkLabel(
             conn_text_frame, 
-            text="MAKCU Device", 
+            text="Input Device", 
             font=("Segoe UI", 12, "bold"),
             text_color="#ccc"
         ).grid(row=0, column=0, sticky="w")
@@ -238,7 +238,7 @@ class EventuriGUI(ctk.CTk, GUISections, GUICallbacks):
         self.build_main_controls(self.right_column, row)
 
     def build_device_controls(self, parent, row):
-        """MAKCU device controls (top section)"""
+        """Input device controls (top section)"""
         frame = ctk.CTkFrame(parent, fg_color="#1a1a1a")
         frame.grid(row=row, column=0, sticky="ew", pady=(0, 10))
         frame.grid_columnconfigure(1, weight=1)
@@ -246,17 +246,35 @@ class EventuriGUI(ctk.CTk, GUISections, GUICallbacks):
         ctk.CTkLabel(frame, text="🔌 Device Controls", font=("Segoe UI", 16, "bold"),
                     text_color="#00e676").grid(row=0, column=0, columnspan=3, pady=(15, 10), padx=15, sticky="w")
 
-        self.connect_btn = neon_button(frame, text="Connect to MAKCU", command=self.on_connect, width=150, height=35)
-        self.connect_btn.grid(row=1, column=0, padx=15, pady=(0, 15), sticky="w")
+        ctk.CTkLabel(frame, text="Device Type:", font=("Segoe UI", 12), text_color="#ffffff")\
+            .grid(row=1, column=0, sticky="w", padx=15, pady=(0, 8))
+        self.device_var = ctk.StringVar(value=str(getattr(config, "input_device", "kmnet")).upper())
+        self.device_menu = ctk.CTkOptionMenu(
+            frame,
+            values=["KMNET", "MACKU"],
+            variable=self.device_var,
+            command=self.on_device_change,
+            width=140,
+        )
+        self.device_menu.grid(row=1, column=1, sticky="w", padx=(5, 15), pady=(0, 8))
+        ctk.CTkLabel(
+            frame,
+            text="kmNet = kmboxnet | macku = native device driver.",
+            font=("Segoe UI", 10, "italic"),
+            text_color="#888",
+        ).grid(row=1, column=2, columnspan=2, sticky="w", padx=(0, 15), pady=(0, 8))
+
+        self.connect_btn = neon_button(frame, text="Connect Device", command=self.on_connect, width=150, height=35)
+        self.connect_btn.grid(row=2, column=0, padx=15, pady=(0, 15), sticky="w")
 
         ctk.CTkButton(frame, text="Test Move", command=test_move, width=100, height=35,
-                    fg_color="#333", hover_color="#555").grid(row=1, column=1, padx=10, pady=(0, 15), sticky="w")
+                    fg_color="#333", hover_color="#555").grid(row=2, column=1, padx=10, pady=(0, 15), sticky="w")
         
         self.input_check_checkbox = ctk.CTkCheckBox(
             frame, text="Input Monitor", variable=self.input_check_var,
             command=self.on_input_check_toggle, text_color="#fff"
         )
-        self.input_check_checkbox.grid(row=1, column=2, padx=15, pady=(0, 15), sticky="w")
+        self.input_check_checkbox.grid(row=2, column=2, padx=15, pady=(0, 15), sticky="w")
 
         self.button_mask_switch = ctk.CTkSwitch(
         frame,
@@ -265,10 +283,10 @@ class EventuriGUI(ctk.CTk, GUISections, GUICallbacks):
         command=self.on_button_mask_toggle,
         text_color="#fff"
     )
-        self.button_mask_switch.grid(row=1, column=3, padx=15, pady=(0, 15), sticky="w")
+        self.button_mask_switch.grid(row=2, column=3, padx=15, pady=(0, 15), sticky="w")
         # --- kmNet connection settings ---
         kmnet_frame = ctk.CTkFrame(frame, fg_color="transparent")
-        kmnet_frame.grid(row=2, column=0, columnspan=4, sticky="ew", padx=15, pady=(0, 10))
+        kmnet_frame.grid(row=3, column=0, columnspan=4, sticky="ew", padx=15, pady=(0, 10))
         kmnet_frame.grid_columnconfigure(1, weight=1)
         kmnet_frame.grid_columnconfigure(3, weight=1)
 
@@ -477,6 +495,29 @@ class EventuriGUI(ctk.CTk, GUISections, GUICallbacks):
         self.capture_offset_y_entry.pack(side="left")
         self.capture_offset_y_entry.insert(0, str(getattr(config, "capture_offset_y", 0)))
 
+        ctk.CTkLabel(self.capture_block, text="Capture FOV (Crop):", font=("Segoe UI", 14), text_color="#ffffff")\
+            .grid(row=5, column=0, sticky="w", padx=15, pady=(8, 0))
+        range_wrap = ctk.CTkFrame(self.capture_block, fg_color="transparent")
+        range_wrap.grid(row=5, column=1, sticky="w", padx=(5, 15), pady=(8, 0))
+
+        ctk.CTkLabel(range_wrap, text="W", font=("Segoe UI", 12), text_color="#ffffff")\
+            .pack(side="left", padx=(0, 6))
+        self.capture_range_x_entry = ctk.CTkEntry(range_wrap, width=80, justify="center")
+        self.capture_range_x_entry.pack(side="left", padx=(0, 12))
+        self.capture_range_x_entry.insert(0, str(getattr(config, "capture_range_x", 200)))
+
+        ctk.CTkLabel(range_wrap, text="H", font=("Segoe UI", 12), text_color="#ffffff")\
+            .pack(side="left", padx=(0, 6))
+        self.capture_range_y_entry = ctk.CTkEntry(range_wrap, width=80, justify="center")
+        self.capture_range_y_entry.pack(side="left")
+        self.capture_range_y_entry.insert(0, str(getattr(config, "capture_range_y", 200)))
+        ctk.CTkLabel(
+            self.capture_block,
+            text="Tip: match this crop size to your aim FOV/region for most precise tracking.",
+            font=("Segoe UI", 10, "italic"),
+            text_color="#888",
+        ).grid(row=6, column=0, columnspan=3, sticky="w", padx=15, pady=(2, 0))
+
         def _commit_capture_settings(event=None):
             try:
                 w = int(self.capture_res_w_entry.get().strip())
@@ -510,6 +551,15 @@ class EventuriGUI(ctk.CTk, GUISections, GUICallbacks):
                     config.capture_offset_y = offset_y
                 except Exception:
                     pass
+                try:
+                    range_x = int(self.capture_range_x_entry.get().strip())
+                    range_y = int(self.capture_range_y_entry.get().strip())
+                    range_x = max(64, min(w, range_x))
+                    range_y = max(64, min(h, range_y))
+                    config.capture_range_x = range_x
+                    config.capture_range_y = range_y
+                except Exception:
+                    pass
                 self.capture_res_w_entry.delete(0, "end"); self.capture_res_w_entry.insert(0, str(w))
                 self.capture_res_h_entry.delete(0, "end"); self.capture_res_h_entry.insert(0, str(h))
                 self.capture_fps_entry.delete(0, "end"); self.capture_fps_entry.insert(0, str(fps))
@@ -517,6 +567,8 @@ class EventuriGUI(ctk.CTk, GUISections, GUICallbacks):
                 self.game_res_h_entry.delete(0, "end"); self.game_res_h_entry.insert(0, str(getattr(config, "game_height", 1080)))
                 self.capture_offset_x_entry.delete(0, "end"); self.capture_offset_x_entry.insert(0, str(getattr(config, "capture_offset_x", 0)))
                 self.capture_offset_y_entry.delete(0, "end"); self.capture_offset_y_entry.insert(0, str(getattr(config, "capture_offset_y", 0)))
+                self.capture_range_x_entry.delete(0, "end"); self.capture_range_x_entry.insert(0, str(getattr(config, "capture_range_x", 200)))
+                self.capture_range_y_entry.delete(0, "end"); self.capture_range_y_entry.insert(0, str(getattr(config, "capture_range_y", 200)))
                 self.capture_device_var.set(selection)
                 if hasattr(config, "save") and callable(config.save):
                     config.save()
@@ -528,6 +580,8 @@ class EventuriGUI(ctk.CTk, GUISections, GUICallbacks):
                 self.game_res_h_entry.delete(0, "end"); self.game_res_h_entry.insert(0, str(getattr(config, "game_height", 1080)))
                 self.capture_offset_x_entry.delete(0, "end"); self.capture_offset_x_entry.insert(0, str(getattr(config, "capture_offset_x", 0)))
                 self.capture_offset_y_entry.delete(0, "end"); self.capture_offset_y_entry.insert(0, str(getattr(config, "capture_offset_y", 0)))
+                self.capture_range_x_entry.delete(0, "end"); self.capture_range_x_entry.insert(0, str(getattr(config, "capture_range_x", 200)))
+                self.capture_range_y_entry.delete(0, "end"); self.capture_range_y_entry.insert(0, str(getattr(config, "capture_range_y", 200)))
 
         self.capture_res_w_entry.bind("<Return>", _commit_capture_settings)
         self.capture_res_h_entry.bind("<Return>", _commit_capture_settings)
@@ -544,19 +598,23 @@ class EventuriGUI(ctk.CTk, GUISections, GUICallbacks):
         self.capture_offset_y_entry.bind("<Return>", _commit_capture_settings)
         self.capture_offset_x_entry.bind("<FocusOut>", _commit_capture_settings)
         self.capture_offset_y_entry.bind("<FocusOut>", _commit_capture_settings)
+        self.capture_range_x_entry.bind("<Return>", _commit_capture_settings)
+        self.capture_range_y_entry.bind("<Return>", _commit_capture_settings)
+        self.capture_range_x_entry.bind("<FocusOut>", _commit_capture_settings)
+        self.capture_range_y_entry.bind("<FocusOut>", _commit_capture_settings)
 
         # Toggles
         self.debug_checkbox = ctk.CTkCheckBox(
             frame, text="Debug Window", variable=self.debug_checkbox_var,
             command=self.on_debug_toggle, text_color="#fff"
         )
-        self.debug_checkbox.grid(row=4, column=0, sticky="w", padx=15, pady=(5, 15))
+        self.debug_checkbox.grid(row=7, column=0, sticky="w", padx=15, pady=(5, 15))
 
         self.calibration_checkbox = ctk.CTkCheckBox(
             frame, text="Calibration Overlay", variable=self.calibration_overlay_var,
             command=self.on_calibration_overlay_toggle, text_color="#fff"
         )
-        self.calibration_checkbox.grid(row=5, column=0, sticky="w", padx=15, pady=(0, 15))
+        self.calibration_checkbox.grid(row=8, column=0, sticky="w", padx=15, pady=(0, 15))
 
         # Initial enable/disable state
         self._update_capture_controls_state()
@@ -659,6 +717,13 @@ class EventuriGUI(ctk.CTk, GUISections, GUICallbacks):
             self.capture_device_menu.configure(state=state)
             self.capture_res_w_entry.configure(state=state)
             self.capture_res_h_entry.configure(state=state)
+            self.capture_fps_entry.configure(state=state)
+            self.game_res_w_entry.configure(state=state)
+            self.game_res_h_entry.configure(state=state)
+            self.capture_offset_x_entry.configure(state=state)
+            self.capture_offset_y_entry.configure(state=state)
+            self.capture_range_x_entry.configure(state=state)
+            self.capture_range_y_entry.configure(state=state)
             if is_capture:
                 self._refresh_capture_devices()
         except Exception:
@@ -666,7 +731,7 @@ class EventuriGUI(ctk.CTk, GUISections, GUICallbacks):
 
         try:
             if is_ndi or is_capture:
-                self.debug_checkbox.grid_configure(row=4)
+                self.debug_checkbox.grid_configure(row=7)
             else:
                 self.debug_checkbox.grid_configure(row=2)
         except Exception:
@@ -974,19 +1039,26 @@ class EventuriGUI(ctk.CTk, GUISections, GUICallbacks):
         self.offset_value.grid(row=2, column=2, pady=5)
         
         # Sensitivity
-        ctk.CTkLabel(settings_frame, text="Smoothing", font=("Segoe UI", 12, "bold"), text_color="#fff").grid(row=3, column=0, sticky="w", pady=5)
+        ctk.CTkLabel(settings_frame, text="Mouse Sensitivity", font=("Segoe UI", 12, "bold"), text_color="#fff").grid(row=3, column=0, sticky="w", pady=5)
         self.in_game_sens_slider = ctk.CTkSlider(settings_frame, from_=0.1, to=20, number_of_steps=199, command=self.update_in_game_sens)
         self.in_game_sens_slider.grid(row=3, column=1, sticky="ew", padx=(10, 5), pady=5)
         self.in_game_sens_value = ctk.CTkLabel(settings_frame, text=f"{config.in_game_sens:.2f}", font=("Segoe UI", 12, "bold"), text_color=NEON, width=50)
         self.in_game_sens_value.grid(row=3, column=2, pady=5)
 
+        ctk.CTkLabel(
+            settings_frame,
+            text="Tip: match in-game sensitivity first, then fine-tune here until the aim lands exactly on target.",
+            font=("Segoe UI", 10, "italic"),
+            text_color="#888",
+        ).grid(row=4, column=0, columnspan=3, sticky="w", pady=(0, 8))
+
         
         # Mouse Button Selection
-        ctk.CTkLabel(settings_frame, text="Aim Key:", font=("Segoe UI", 12, "bold"), text_color="#fff").grid(row=4, column=0, sticky="nw", pady=(10, 5))
+        ctk.CTkLabel(settings_frame, text="Aim Key:", font=("Segoe UI", 12, "bold"), text_color="#fff").grid(row=5, column=0, sticky="nw", pady=(10, 5))
         
         self.btn_var = ctk.IntVar(value=config.selected_mouse_button)
         btn_frame = ctk.CTkFrame(settings_frame, fg_color="transparent")
-        btn_frame.grid(row=4, column=1, columnspan=2, sticky="ew", pady=(10, 5))
+        btn_frame.grid(row=5, column=1, columnspan=2, sticky="ew", pady=(10, 5))
         
         for i, txt in enumerate(["Left", "Right", "Middle", "Side 4", "Side 5"]):
             ctk.CTkRadioButton(btn_frame, text=txt, variable=self.btn_var, value=i, command=self.update_mouse_btn, text_color="#fff").pack(side="left", padx=8)
@@ -1143,21 +1215,22 @@ class EventuriGUI(ctk.CTk, GUISections, GUICallbacks):
     def on_connect(self):
         """Enhanced connection with visual feedback"""
         Mouse.cleanup()  # Ensure mouse is clean before connecting
+        device_label = str(getattr(config, "input_device", "kmnet")).upper()
         if connect_to_makcu():
             start_listener()
             config.makcu_connected = True
-            config.makcu_status_msg = "Connected"
-            self.connection_status.set("Connected")
+            self.connection_status.set(config.makcu_status_msg or f"Connected ({device_label})")
             self.connection_color.set("#00FF00")
             self.conn_indicator.configure(fg_color="#00FF00")
-            self.error_text.set("✅ MAKCU device connected successfully!")
+            self.error_text.set(f"✅ {device_label} device connected successfully!")
         else:
             config.makcu_connected = False
-            config.makcu_status_msg = "Connection Failed"
-            self.connection_status.set("Disconnected")
+            if not config.makcu_status_msg:
+                config.makcu_status_msg = f"{device_label} connection failed"
+            self.connection_status.set(config.makcu_status_msg)
             self.connection_color.set("#b71c1c")
             self.conn_indicator.configure(fg_color="#b71c1c")
-            self.error_text.set("❌ Failed to connect to MAKCU device")
+            self.error_text.set(f"❌ Failed to connect to {device_label} device")
         
         self.conn_status_lbl.configure(text_color=self.connection_color.get())
 
@@ -1174,6 +1247,18 @@ class EventuriGUI(ctk.CTk, GUISections, GUICallbacks):
         
         self.conn_status_lbl.configure(text_color=self.connection_color.get())
         self.after(500, self._poll_connection_status)
+
+    def _update_kmnet_state(self):
+        device = str(getattr(config, "input_device", "kmnet")).lower()
+        state = "normal" if device == "kmnet" else "disabled"
+        for entry in (
+            getattr(self, "kmnet_ip_entry", None),
+            getattr(self, "kmnet_port_entry", None),
+            getattr(self, "kmnet_mac_entry", None),
+            getattr(self, "kmnet_monitor_entry", None),
+        ):
+            if entry is not None:
+                entry.configure(state=state)
 
     # Include all the callback methods from gui_callbacks.py
     def refresh_all(self):
@@ -1208,6 +1293,9 @@ class EventuriGUI(ctk.CTk, GUISections, GUICallbacks):
         self.trigger_enabled_var.set(bool(getattr(config, "trigger_enabled", False)))
         self.trigger_always_on_var.set(bool(getattr(config, "trigger_always_on", False)))
         self.trigger_btn_var.set(int(getattr(config, "trigger_button", 0)))
+        if hasattr(self, "device_var"):
+            self.device_var.set(str(getattr(config, "input_device", "kmnet")).upper())
+        self._update_kmnet_state()
 
         try:
             self.tb_radius_entry.delete(0,"end"); self.tb_radius_entry.insert(0, str(config.trigger_radius_px))
@@ -1217,6 +1305,12 @@ class EventuriGUI(ctk.CTk, GUISections, GUICallbacks):
             self._update_trigger_widgets_state()
         except Exception:
             pass  
+
+        try:
+            self.capture_range_x_entry.delete(0, "end"); self.capture_range_x_entry.insert(0, str(getattr(config, "capture_range_x", 200)))
+            self.capture_range_y_entry.delete(0, "end"); self.capture_range_y_entry.insert(0, str(getattr(config, "capture_range_y", 200)))
+        except Exception:
+            pass
 
         # NDI source menu initial state
         try:

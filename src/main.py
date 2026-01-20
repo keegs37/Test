@@ -39,7 +39,7 @@ def smooth_movement_loop():
 
             # Execute the movement
             if makcu is None:
-                print("[WARN] Smooth movement skipped: MAKCU device not initialized")
+                print("[WARN] Smooth movement skipped: device not initialized")
                 time.sleep(0.05)
                 continue
             makcu.move(dx, dy)
@@ -61,11 +61,14 @@ def _now_ms():
     return time.perf_counter() * 1000.0
 
 def _resolve_output_resolution():
-    candidates = [
+    candidates = []
+    if config.capturer_mode.lower() == "capture":
+        candidates.append((getattr(config, "game_width", 0), getattr(config, "game_height", 0)))
+    candidates.extend([
         (getattr(config, "main_pc_width", 0), getattr(config, "main_pc_height", 0)),
         (getattr(config, "screen_width", 0), getattr(config, "screen_height", 0)),
         (getattr(config, "game_width", 0), getattr(config, "game_height", 0)),
-    ]
+    ])
     for width, height in candidates:
         if width and height and width > 0 and height > 0:
             return int(width), int(height)
@@ -201,6 +204,10 @@ def detection_and_aim_loop():
             continue
 
         # --- Target Processing Logic ---
+        frame_h, frame_w = image.shape[:2]
+        frame_center_x = frame_w / 2.0
+        frame_center_y = frame_h / 2.0
+
         if results:
             for result in results:
                 if result.boxes is None: continue
@@ -268,11 +275,8 @@ def detection_and_aim_loop():
                             center_x = (x1 + x2) / 2.0
                             center_y = y1 + config.player_y_offset
 
-                        # Calculate distance from crosshair
-                        if config.capturer_mode.lower() == "mss":
-                            dist = math.hypot(center_x - (config.region_size / 2), center_y - (config.region_size / 2))
-                        else:
-                            dist = math.hypot(center_x - (config.ndi_width / 2), center_y - (config.ndi_height / 2))
+                        # Calculate distance from crosshair (use frame center for accuracy)
+                        dist = math.hypot(center_x - frame_center_x, center_y - frame_center_y)
                         all_targets.append({
                             'dist': dist, 
                             'center_x': center_x, 
@@ -325,19 +329,19 @@ def detection_and_aim_loop():
                 dx *= config.normal_x_speed
                 dy *= config.normal_y_speed
                 if makcu is None:
-                    print("[WARN] Aim skipped: MAKCU device not initialized")
+                    print("[WARN] Aim skipped: device not initialized")
                     return
                 makcu.move(dx, dy)
                 return
             if config.mode == "bezier":
                 if makcu is None:
-                    print("[WARN] Aim skipped: MAKCU device not initialized")
+                    print("[WARN] Aim skipped: device not initialized")
                     return
                 makcu.move_bezier(dx, dy, config.bezier_segments, config.bezier_ctrl_x, config.bezier_ctrl_y)
                 return
             if config.mode == "silent":
                 if makcu is None:
-                    print("[WARN] Aim skipped: MAKCU device not initialized")
+                    print("[WARN] Aim skipped: device not initialized")
                     return
                 makcu.move_bezier(dx, dy, config.silent_segments, config.silent_ctrl_x, config.silent_ctrl_y)
                 return
@@ -373,7 +377,7 @@ def detection_and_aim_loop():
             if len(path) == 0:
                 print("[DEBUG] No smooth path generated, using direct movement")
                 if makcu is None:
-                    print("[WARN] Aim skipped: MAKCU device not initialized")
+                    print("[WARN] Aim skipped: device not initialized")
                     return
                 makcu.move(dx, dy)
 
@@ -420,9 +424,9 @@ def detection_and_aim_loop():
 
                         if linger_ok and cooldown_ok:
                             try:
-                                # Single click via MAKCU
+                                # Single click via device
                                 if makcu is None:
-                                    print("[WARN] Trigger click skipped: MAKCU device not initialized")
+                                    print("[WARN] Trigger click skipped: device not initialized")
                                 else:
                                     makcu.click()
                             except Exception as e:
@@ -463,10 +467,7 @@ def detection_and_aim_loop():
                 cv2.putText(debug_image, classes_text, (10, debug_image.shape[0] - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.4, (200, 200, 200), 1)
 
             # Draw crosshair
-            if config.capturer_mode.lower() == "mss":
-                center = (config.region_size // 2, config.region_size // 2)
-            else:
-                center = (config.ndi_width // 2, config.ndi_height // 2)
+            center = (int(frame_center_x), int(frame_center_y))
 
             cv2.drawMarker(debug_image, center, (255, 255, 255), cv2.MARKER_CROSS, 20, 2)
 

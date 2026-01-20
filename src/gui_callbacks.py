@@ -51,6 +51,21 @@ class GUICallbacks:
             self.kmnet_monitor_entry.delete(0, "end"); self.kmnet_monitor_entry.insert(0, str(getattr(config, "kmnet_monitor_port", 10000)))
         except Exception:
             pass
+        if hasattr(self, "device_var"):
+            self.device_var.set(str(getattr(config, "input_device", "kmnet")).upper())
+        self._update_kmnet_state()
+
+    def _update_kmnet_state(self):
+        device = str(getattr(config, "input_device", "kmnet")).lower()
+        state = "normal" if device == "kmnet" else "disabled"
+        for entry in (
+            getattr(self, "kmnet_ip_entry", None),
+            getattr(self, "kmnet_port_entry", None),
+            getattr(self, "kmnet_mac_entry", None),
+            getattr(self, "kmnet_monitor_entry", None),
+        ):
+            if entry is not None:
+                entry.configure(state=state)
 
     def on_connect(self):
         if connect_to_makcu():
@@ -59,6 +74,12 @@ class GUICallbacks:
         else:
             self.error_text.set("Failed to connect! " + config.makcu_status_msg)
         self.refresh_all()
+
+    def on_device_change(self, value):
+        config.input_device = value.strip().lower()
+        if hasattr(config, "save") and callable(config.save):
+            config.save()
+        self._update_kmnet_state()
 
     def update_fov(self, val):
         config.region_size = int(round(val))
