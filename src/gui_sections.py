@@ -8,7 +8,7 @@ class GUISections:
         # --- STATUS BAR ---
         status_bar = ctk.CTkFrame(self, fg_color=BG)
         status_bar.pack(padx=0, pady=(6, 8), fill="x")
-        ctk.CTkLabel(status_bar, text="MAKCU:", text_color="#ccc", bg_color=BG, font=("Segoe UI", 14)).pack(side="left", padx=(12, 2))
+        ctk.CTkLabel(status_bar, text="Device:", text_color="#ccc", bg_color=BG, font=("Segoe UI", 14)).pack(side="left", padx=(12, 2))
         self.conn_status_lbl = ctk.CTkLabel(status_bar, textvariable=self.connection_status, text_color=self.connection_color.get(), font=("Segoe UI", 14, "bold"))
         self.conn_status_lbl.pack(side="left", padx=(0, 18))
         self.fps_label = ctk.CTkLabel(status_bar, textvariable=self.fps_var, font=("Segoe UI", 13, "bold"), text_color="#00e676")
@@ -21,10 +21,20 @@ class GUISections:
         self.error_lbl = ctk.CTkLabel(status_bar, textvariable=self.error_text, text_color=NEON, font=("Segoe UI", 13, "bold"))
         self.error_lbl.pack(side="right", padx=8)
         
-        # --- MAKCU CONTROLS ---
+        # --- DEVICE CONTROLS ---
         makcu_frame = ctk.CTkFrame(self, fg_color=BG)
         makcu_frame.pack(fill="x", padx=10, pady=(0, 8))
-        self.connect_btn = neon_button(makcu_frame, text="Connect to MAKCU", command=self.on_connect)
+        ctk.CTkLabel(makcu_frame, text="Device:", text_color="#fff").pack(side="left", padx=(10, 6))
+        self.device_var = ctk.StringVar(value=str(getattr(config, "input_device", "kmnet")).upper())
+        self.device_menu = ctk.CTkOptionMenu(
+            makcu_frame,
+            values=["KMNET", "MACKU"],
+            variable=self.device_var,
+            command=self.on_device_change,
+            width=110,
+        )
+        self.device_menu.pack(side="left", padx=(0, 10))
+        self.connect_btn = neon_button(makcu_frame, text="Connect Device", command=self.on_connect)
         self.connect_btn.pack(side="left", padx=(10, 5), pady=8)
         ctk.CTkButton(makcu_frame, text="Test Move", command=test_move, fg_color="#181818", hover_color="#000000").pack(side="left", padx=8)
         self.debug_checkbox = ctk.CTkCheckBox(makcu_frame, text="Show Debug Window", variable=self.debug_checkbox_var, onvalue=True, offvalue=False, text_color="#fff", command=self.on_debug_toggle)
@@ -144,7 +154,7 @@ class GUISections:
         self.offset_value = ctk.CTkLabel(control_frame, text=str(config.player_y_offset), text_color="#ff5e69", width=40)
         self.offset_value.grid(row=2, column=2, padx=2)
         
-        ctk.CTkLabel(control_frame, text="In Game Sens", text_color="#fff").grid(row=3, column=0, sticky="w", padx=6)
+        ctk.CTkLabel(control_frame, text="Mouse Sensitivity", text_color="#fff").grid(row=3, column=0, sticky="w", padx=6)
         self.in_game_sens_slider = ctk.CTkSlider(
             control_frame, from_=0.1, to=8, number_of_steps=79, command=self.update_in_game_sens
         )
@@ -154,15 +164,23 @@ class GUISections:
         )
         self.in_game_sens_value.grid(row=3, column=2, padx=2)
         self.in_game_sens_slider.set(config.in_game_sens)
+
+        sens_help = ctk.CTkLabel(
+            control_frame,
+            text="Tip: set in-game sensitivity first, then nudge this slider until a 1x move matches your mouse feel.",
+            text_color="#888",
+            font=("Segoe UI", 10, "italic"),
+        )
+        sens_help.grid(row=4, column=0, columnspan=3, padx=6, pady=(2, 8), sticky="w")
         
         # Configure column weights
         control_frame.grid_columnconfigure(1, weight=1)
         
         # Mouse buttons
-        ctk.CTkLabel(control_frame, text="Mouse Button:", text_color="#fff").grid(row=4, column=0, sticky="w", padx=6, pady=(8,0))
+        ctk.CTkLabel(control_frame, text="Mouse Button:", text_color="#fff").grid(row=5, column=0, sticky="w", padx=6, pady=(8,0))
         self.btn_var = ctk.IntVar(value=config.selected_mouse_button)
         btnrow = ctk.CTkFrame(control_frame, fg_color=BG)
-        btnrow.grid(row=4, column=1, pady=(8,0), columnspan=2, sticky="w")
+        btnrow.grid(row=5, column=1, pady=(8,0), columnspan=2, sticky="w")
         for i, txt in enumerate(["Left", "Right", "Middle", "Side 4", "Side 5"]):
             ctk.CTkRadioButton(btnrow, text=txt, variable=self.btn_var, value=i, command=self.update_mouse_btn, text_color="#fff", hover_color=NEON).pack(side="left", padx=5)
         
